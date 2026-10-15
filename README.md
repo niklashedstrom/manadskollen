@@ -11,7 +11,7 @@ Personal income/expense overview from Nordea exports (account PDFs, card CSV). S
 
 ## Setup
 
-1. Supabase: run `supabase/migrations/0001_init.sql` in the project.
+1. Supabase: tables live in the `training` project with an `mk_` prefix; `supabase/migrations/0001_init.sql` is already applied there.
 2. Supabase → Authentication → URL Configuration: set Site URL to the Vercel URL and add it under Redirect URLs.
 3. Fill in `config.js` with the project URL and anon (publishable) key.
 4. Vercel → Add New Project → import this repo. Framework preset: Other. No build command, output directory `.`.

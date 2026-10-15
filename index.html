@@ -200,16 +200,16 @@ function persistMonths(ms){if(!sb){saveLocal();return}
   const set=new Set(ms);
   const rows=S.tx.filter(t=>set.has(t.date.slice(0,7))).map(t=>({id:t.id,src:t.src,date:t.date,amount:t.amount,text:t.text,key:t.key}));
   for(let i=0;i<rows.length;i+=500){const chunk=rows.slice(i,i+500);
-    enqueue(async()=>{const{error}=await sb.from("transactions").upsert(chunk,{onConflict:"user_id,id",ignoreDuplicates:true});if(error)throw error})}}
+    enqueue(async()=>{const{error}=await sb.from("mk_transactions").upsert(chunk,{onConflict:"user_id,id",ignoreDuplicates:true});if(error)throw error})}}
 function save(){if(!sb){saveLocal();return}if(S.sample)return;
   if(!metaTimer)pending++; // a waiting settings write blocks pulls
   clearTimeout(metaTimer);
   metaTimer=setTimeout(()=>{metaTimer=null;pending--;const body={rules:S.rules,overrides:S.overrides,tags:S.tags,flips:S.flips,own:S.own,updated_at:new Date().toISOString()};
-    enqueue(async()=>{const{error}=await sb.from("settings").upsert(body,{onConflict:"user_id"});if(error)throw error})},500)}
+    enqueue(async()=>{const{error}=await sb.from("mk_settings").upsert(body,{onConflict:"user_id"});if(error)throw error})},500)}
 function wipe(){S=blank();
   if(!sb){try{localStorage.removeItem(KEY)}catch(_){}return}
-  enqueue(async()=>{const a=await sb.from("transactions").delete().eq("user_id",user.id);if(a.error)throw a.error;
-    const b=await sb.from("settings").delete().eq("user_id",user.id);if(b.error)throw b.error})}
+  enqueue(async()=>{const a=await sb.from("mk_transactions").delete().eq("user_id",user.id);if(a.error)throw a.error;
+    const b=await sb.from("mk_settings").delete().eq("user_id",user.id);if(b.error)throw b.error})}
 
 async function pull(){
   if(!sb||!user||pending>0)return;
@@ -217,9 +217,9 @@ async function pull(){
   try{
     const all=[];
     for(let from=0;;from+=1000){
-      const{data,error}=await sb.from("transactions").select("id,src,date,amount,text,key").order("date",{ascending:false}).order("id").range(from,from+999);
+      const{data,error}=await sb.from("mk_transactions").select("id,src,date,amount,text,key").order("date",{ascending:false}).order("id").range(from,from+999);
       if(error)throw error;all.push(...data);if(data.length<1000)break}
-    const{data:st,error:e2}=await sb.from("settings").select("rules,overrides,tags,flips,own").maybeSingle();if(e2)throw e2;
+    const{data:st,error:e2}=await sb.from("mk_settings").select("rules,overrides,tags,flips,own").maybeSingle();if(e2)throw e2;
     if(pending>0)return; // a local change started meanwhile; it wins
     lastPull=Date.now();setSync("ok","Synkad");
     if(!all.length&&!st){
