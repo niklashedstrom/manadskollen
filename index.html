@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f3f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f141a" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="robots" content="noindex">
+<title>Månadskollen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+html{color-scheme:light;-webkit-text-size-adjust:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+/* Layout: one narrow column, phone-first; header + file strip, then three tabs (Översikt, Tagga, Transaktioner). */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --ink:#16202a; --muted:#5f6b78; --line:#dde2e8;
+  --accent:#1f5f8b; --in:#1b8a5a; --out:#c4553a; --soft:#e8eef4;
+  --f-ui:"Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-num:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141a; --surface:#171e26; --ink:#e6ebf0; --muted:#94a1ae; --line:#28323d;
+  --accent:#6aa9d6; --in:#4cc48c; --out:#ec7c62; --soft:#1e2833; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141a; --surface:#171e26; --ink:#e6ebf0; --muted:#94a1ae; --line:#28323d;
+  --accent:#6aa9d6; --in:#4cc48c; --out:#ec7c62; --soft:#1e2833; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.45}
+.wrap{max-width:820px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+h1{font-size:1.6rem;font-weight:700;letter-spacing:-.02em;margin:0}
+h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin:0}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.sub{color:var(--muted);margin:2px 0 0}
+button,select,input{font:inherit;color:inherit}
+.btn{background:var(--accent);color:var(--surface);border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn:focus-visible,.chip:focus-visible,.tab:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.drop{border:1.5px dashed var(--line);border-radius:12px;padding:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:var(--surface)}
+.drop.over{border-color:var(--accent);background:var(--soft)}
+.drop p{margin:0;color:var(--muted);min-width:0;flex:1 1 220px}
+.sources{display:flex;flex-wrap:wrap;gap:8px}
+.sources{flex-direction:column;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sources:empty{display:none}
+.src{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.src:first-child{border-top:0}
+.src b{font-weight:600}
+.src small{grid-column:1;color:var(--muted);font-size:.8rem}
+.src button{grid-row:1/3;grid-column:2;background:var(--soft);border:0;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:.8rem;white-space:nowrap}
+.src.reset{grid-template-columns:1fr auto;color:var(--muted);font-size:.85rem}
+.notice{background:var(--soft);border-radius:10px;padding:10px 14px;font-size:.9rem}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tab{background:none;border:0;padding:10px 12px;cursor:pointer;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab[aria-selected="true"]{color:var(--ink);border-color:var(--accent)}
+.tab .badge{font-family:var(--f-num);font-size:.72rem;background:var(--out);color:var(--surface);border-radius:999px;padding:1px 6px;margin-left:4px}
+.panel{display:flex;flex-direction:column;gap:16px}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.kpi{background:var(--surface);padding:12px 14px;min-width:0}
+.kpi .l{font-size:.75rem;color:var(--muted)}
+.kpi .v{font-size:1.15rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .v.in{color:var(--in)} .kpi .v.out{color:var(--out)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:var(--surface);border:0;padding:6px 11px;cursor:pointer;font-size:.85rem}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.chart{overflow-x:auto}
+.chart svg{display:block;width:100%;min-width:320px;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.brk{display:flex;flex-direction:column;gap:10px}
+.brk .it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:baseline}
+.brk .nm{display:flex;align-items:center;gap:8px;min-width:0}
+.brk .bar{grid-column:1/-1;height:6px;background:var(--soft);border-radius:3px;overflow:hidden}
+.brk .bar i{display:block;height:100%;border-radius:3px}
+.brk .am{font-size:.88rem;text-align:right}
+.brk .am small{color:var(--muted);display:block;font-size:.75rem}
+.groups{display:flex;flex-direction:column;gap:10px}
+.grp{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.grp .h{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.grp .n{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.grp .meta{color:var(--muted);font-size:.82rem;white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:5px 11px;cursor:pointer;font-size:.85rem;display:inline-flex;align-items:center;gap:6px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.addtag{display:flex;gap:8px}
+.addtag input,.filters input,.filters select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;min-width:0}
+.addtag input{flex:1}
+.filters{display:flex;flex-wrap:wrap;gap:8px}
+.filters input{flex:1 1 180px}
+.txl{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tx{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 12px;padding:10px 14px;border-top:1px solid var(--line);align-items:center}
+.tx:first-child{border-top:0}
+.tx .d{font-size:.78rem;color:var(--muted);grid-row:span 2}
+.tx .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx .a{text-align:right}
+.tx .a.in{color:var(--in)}
+.tx select{grid-column:2/4;justify-self:start;border:0;background:var(--soft);border-radius:6px;padding:2px 6px;font-size:.8rem;max-width:100%}
+.tx .s{font-size:.72rem;color:var(--muted)}
+.empty{color:var(--muted);text-align:center;padding:24px}
+.foot{font-size:.8rem;color:var(--muted)}
+.sync{display:flex;align-items:center;gap:6px;margin:6px 0 0;font-size:.8rem;color:var(--muted)}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.sync[data-s="ok"] i{background:var(--in)}.sync[data-s="busy"] i{background:#d49a2a}.sync[data-s="err"] i,.sync[data-s="local"] i{background:var(--out)}
+.grp .state{font-size:.82rem;color:var(--in);font-weight:600;margin-top:-4px}
+.grp.done{border-color:var(--in)}
+.mnav{display:flex;align-items:center;gap:6px}
+.mnav h3{margin:0;font-size:1.05rem;font-weight:600;min-width:9.5em;text-align:center}
+.mnav button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:1.1rem;line-height:1}
+.mnav button:disabled{opacity:.35;cursor:default}
+.pill{font-size:.7rem;font-weight:600;background:var(--soft);color:var(--muted);border-radius:999px;padding:2px 7px;vertical-align:middle}
+.avg{margin:-6px 0 0;font-size:.85rem;color:var(--muted)}
+.avg b{color:var(--ink);font-weight:500}
+details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
+@media (max-width:480px){.kpi .v{font-size:.98rem}.kpi{padding:10px}}
+@media (prefers-reduced-motion:no-preference){.brk .bar i{transition:width .3s}}
+.login{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;max-width:420px}
+.login h2{font-size:1rem;text-transform:none;letter-spacing:0;color:var(--ink)}
+.login p{margin:0;color:var(--muted)}
+.login form{display:flex;gap:8px;flex-wrap:wrap}
+.login input{flex:1 1 200px;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:inherit;text-decoration:underline}
+#app{display:contents}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="/config.js"></script>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Månadskollen</h1>
+      <p class="sub">Inkomster och utgifter från Nordea-konto och kreditkort</p>
+      <p class="sync" id="sync"><i></i><span>Ansluter…</span></p>
+    </div>
+  </header>
+
+  <section class="login" id="login" hidden>
+    <h2>Logga in</h2>
+    <p>Du får en inloggningslänk via mejl. Öppna den på enheten du vill använda.</p>
+    <form id="loginform"><input type="email" id="email" required autocomplete="email" placeholder="din@epost.se" aria-label="E-post"><button class="btn" type="submit">Skicka länk</button></form>
+    <p id="loginmsg" role="status"></p>
+  </section>
+  <div id="app" hidden>
+
+  <label class="drop" id="drop" for="file">
+    <p>Släpp CSV- eller PDF-filer från Nordea här, eller välj filer. Flera filer och överlappande perioder går bra, dubbletter sorteras bort.</p>
+    <span class="btn" role="button">Välj filer</span>
+    <input type="file" id="file" accept=".csv,.pdf,text/csv,text/plain,application/pdf" multiple hidden>
+  </label>
+
+  <div id="notice" class="notice" hidden></div>
+  <div class="sources" id="sources"></div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="ov" aria-selected="true">Översikt</button>
+    <button class="tab" role="tab" data-tab="tag" aria-selected="false">Tagga<span class="badge" id="badge" hidden></span></button>
+    <button class="tab" role="tab" data-tab="tx" aria-selected="false">Transaktioner</button>
+  </nav>
+
+  <section class="panel" id="p-ov"></section>
+  <section class="panel" id="p-tag" hidden></section>
+  <section class="panel" id="p-tx" hidden></section>
+
+  </div>
+  <p class="foot"><span id="who"></span> Datan sparas i din egen databas, och bara ditt konto kan läsa den. Taggen ”Överföring” räknas inte med, så betalningen av kortfakturan blir inte en dubbel utgift.</p>
+</div>
+
+<script>
+(function(){
+const KEY="manadskollen-v1";
+const TRANSFER="Överföring";
+const PALETTE=["#1f5f8b","#c4553a","#d49a2a","#6b4fa0","#2e8f8a","#b04a7a","#5f7d2f","#8a6a4a","#3f6fd1","#9a9a2a","#7a8a99"];
+const DEFAULT_TAGS=["Mat","Restaurang","Hem","Transport","Nöje","Shopping","Hälsa","Prenumerationer","Sparande","Lön",TRANSFER,"Övrigt"];
+const MONTHS=["jan","feb","mar","apr","maj","jun","jul","aug","sep","okt","nov","dec"];
+
+let S=sampleState();
+let view={just:new Set(),tab:"ov",range:12,month:null,q:"",tf:"",showTagged:false};
+
+function blank(){return{own:[],tx:[],rules:{},overrides:{},tags:DEFAULT_TAGS.slice(),flips:{},sample:false}}
+function load(){try{const r=localStorage.getItem(KEY);if(r){const s=JSON.parse(r);return Object.assign(blank(),s)}}catch(e){}return sampleState()}
+function saveLocal(){try{if(!S.sample)localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+
+/* ---------- sync: Supabase (tables transactions + settings, row-level security per user) ---------- */
+const CFG=window.MK_CONFIG||{};
+let sb=null,user=null,metaTimer=null,queue=Promise.resolve(),pending=0,lastPull=0;
+function setSync(st,txt){const el=document.getElementById("sync");el.dataset.s=st;el.querySelector("span").textContent=txt}
+function enqueue(fn){pending++;setSync("busy","Sparar…");queue=queue.then(fn).then(()=>{if(--pending===0)setSync("ok","Synkad")},e=>{pending--;console.error(e);
+  setSync("err","Kunde inte spara: "+(e&&e.message||"okänt fel"))});return queue}
+function drained(){}
+function monthsOf(rows){return[...new Set(rows.map(t=>t.date.slice(0,7)))]}
+function persistMonths(ms){if(!sb){saveLocal();return}
+  const set=new Set(ms);
+  const rows=S.tx.filter(t=>set.has(t.date.slice(0,7))).map(t=>({id:t.id,src:t.src,date:t.date,amount:t.amount,text:t.text,key:t.key}));
+  for(let i=0;i<rows.length;i+=500){const chunk=rows.slice(i,i+500);
+    enqueue(async()=>{const{error}=await sb.from("transactions").upsert(chunk,{onConflict:"user_id,id",ignoreDuplicates:true});if(error)throw error})}}
+function save(){if(!sb){saveLocal();return}if(S.sample)return;
+  if(!metaTimer)pending++; // a waiting settings write blocks pulls
+  clearTimeout(metaTimer);
+  metaTimer=setTimeout(()=>{metaTimer=null;pending--;const body={rules:S.rules,overrides:S.overrides,tags:S.tags,flips:S.flips,own:S.own,updated_at:new Date().toISOString()};
+    enqueue(async()=>{const{error}=await sb.from("settings").upsert(body,{onConflict:"user_id"});if(error)throw error})},500)}
+function wipe(){S=blank();
+  if(!sb){try{localStorage.removeItem(KEY)}catch(_){}return}
+  enqueue(async()=>{const a=await sb.from("transactions").delete().eq("user_id",user.id);if(a.error)throw a.error;
+    const b=await sb.from("settings").delete().eq("user_id",user.id);if(b.error)throw b.error})}
+
+async function pull(){
+  if(!sb||!user||pending>0)return;
+  setSync("busy","Hämtar…");
+  try{
+    const all=[];
+    for(let from=0;;from+=1000){
+      const{data,error}=await sb.from("transactions").select("id,src,date,amount,text,key").order("date",{ascending:false}).order("id").range(from,from+999);
+      if(error)throw error;all.push(...data);if(data.length<1000)break}
+    const{data:st,error:e2}=await sb.from("settings").select("rules,overrides,tags,flips,own").maybeSingle();if(e2)throw e2;
+    if(pending>0)return; // a local change started meanwhile; it wins
+    lastPull=Date.now();setSync("ok","Synkad");
+    if(!all.length&&!st){
+      const l=load();
+      if(!l.sample&&l.tx.length){S=l;persistMonths(monthsOf(S.tx));save();showNotice("Flyttade "+S.tx.length+" transaktioner från webbläsaren till databasen.")}
+      else S=sampleState();
+      render();return}
+    S=blank();
+    S.tx=all.map(t=>({...t,amount:Number(t.amount)}));
+    if(st){S.rules=st.rules||{};S.overrides=st.overrides||{};S.tags=st.tags||DEFAULT_TAGS.slice();S.flips=st.flips||{};S.own=st.own||[]}
+    if(!S.tags.includes("Sparande"))S.tags.splice(Math.max(0,S.tags.indexOf("Lön")),0,"Sparande");
+    render();
+  }catch(e){console.error(e);setSync("err","Kunde inte hämta: "+(e.message||"okänt fel"))}
+}
+
+function showApp(on){document.getElementById("app").hidden=!on;document.getElementById("login").hidden=on}
+function whoLine(){const w=document.getElementById("who");w.innerHTML=user?`Inloggad som ${esc(user.email||"")} · <button class="linkbtn" id="logout">Logga ut</button>.`:""}
+async function boot(){
+  if(!window.supabase||!CFG.url||!CFG.anonKey){setSync("local","Ingen databas konfigurerad, sparas bara i den här webbläsaren");
+    const l=load();if(l.tx.length)S=l;showApp(true);render();return}
+  sb=window.supabase.createClient(CFG.url,CFG.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  const{data:{session}}=await sb.auth.getSession();
+  user=session?session.user:null;
+  sb.auth.onAuthStateChange((ev,sess)=>{const was=user&&user.id;user=sess?sess.user:null;
+    if(user&&user.id!==was){showApp(true);whoLine();pull()}
+    if(!user){showApp(false);whoLine();S=sampleState()}});
+  // other devices may have changed things; refresh when the page comes back into view
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&Date.now()-lastPull>15000)pull()});
+  if(!user){showApp(false);return}
+  showApp(true);whoLine();await pull();
+}
+document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
+document.getElementById("loginform").addEventListener("submit",async e=>{
+  e.preventDefault();const email=document.getElementById("email").value.trim();const msg=document.getElementById("loginmsg");
+  if(!sb){msg.textContent="Databasen är inte konfigurerad.";return}
+  msg.textContent="Skickar…";
+  const{error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin}});
+  msg.textContent=error?"Det gick inte: "+error.message:"Kolla mejlen och öppna länken.";
+});
+
+/* ---------- parsing ---------- */
+function splitLine(line,d){const out=[];let cur="",q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c=='"'){if(q&&line[i+1]=='"'){cur+='"';i++}else q=!q}else if(c===d&&!q){out.push(cur);cur=""}else cur+=c}out.push(cur);return out.map(s=>s.trim())}
+function parseAmount(s){if(s==null)return NaN;s=String(s).replace(/[\s ]/g,"").replace(/kr|SEK/gi,"");if(s.includes(",")&&s.includes("."))s=s.replace(/\./g,"");s=s.replace(",",".").replace("−","-");return parseFloat(s)}
+function parseDate(s){if(!s)return null;s=s.trim();let m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);if(m)return m[1]+"-"+m[2].padStart(2,"0")+"-"+m[3].padStart(2,"0");m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);if(m)return m[3]+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");return null}
+function findCol(h,res){for(const re of res){const i=h.findIndex(x=>re.test(x));if(i>=0)return i}return -1}
+
+function parseCSV(text,fileName){
+  text=text.replace(/^﻿/,"");
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2)throw new Error("Filen är tom.");
+  const first=lines[0];
+  const d=[";","\t",","].sort((a,b)=>first.split(b).length-first.split(a).length)[0];
+  const h=splitLine(first,d).map(x=>x.toLowerCase());
+  // pick the first date-like column that actually has dates (Nordea card exports leave Bokföringsdag empty)
+  const sample=lines.slice(1,30).map(l=>splitLine(l,d));
+  const iDate=h.map((x,i)=>i).filter(i=>/dag|datum|date/.test(h[i])).sort((a,b)=>(/bokföringsdag/.test(h[b])?1:0)-(/bokföringsdag/.test(h[a])?1:0))
+    .find(i=>sample.filter(c=>parseDate(c[i])).length>sample.length/2)??-1;
+  const iAmt=findCol(h,[/^belopp/,/belopp|amount/]);
+  const iText=findCol(h,[/^rubrik/,/^transaktion$/,/^text/,/^namn/,/beskrivning|meddelande|transaktion|namn|mottagare/]);
+  const iName=findCol(h,[/^namn$/]);
+  if(iDate<0||iAmt<0)throw new Error("Hittade inga kolumner för datum och belopp i "+fileName+".");
+  const isCard=/kort|card|credit|premium/i.test(fileName)||h.some(x=>/^transaktion$|kategori/.test(x));
+  const src=accountLabel(fileName,isCard,lines.slice(0,3).join(" "));
+  if(!isCard)noteOwn(fileName);
+  const rows=[];const seen={};
+  for(let k=1;k<lines.length;k++){
+    const c=splitLine(lines[k],d);
+    const date=parseDate(c[iDate]);if(!date)continue;
+    const amount=parseAmount(c[iAmt]);if(!isFinite(amount))continue;
+    let t=(iText>=0?c[iText]:"")||"";
+    if(!t&&iName>=0)t=c[iName]||"";
+    if(iName>=0&&iName!==iText&&c[iName]&&!t.includes(c[iName]))t=t?t+" · "+c[iName]:c[iName];
+    t=t||"(ingen text)";
+    if(/^reserverat/i.test(t))continue; // pending; shows up again once booked
+    const base=src+"|"+date+"|"+amount.toFixed(2)+"|"+t;
+    seen[base]=(seen[base]||0)+1;
+    rows.push({id:base+"|"+seen[base],src,date,amount,text:t,key:merchantKey(t)});
+  }
+  return {src,rows};
+}
+function merchantKey(t){
+  // transfers are told apart by the account number they go to
+  const tr=t.match(/^överföring\s+([\d -]{6,})/i);if(tr)return "överföring "+tr[1].replace(/\D/g,"");
+  let s=t.toLowerCase().replace(/kortköp|köp|reservation|reserverat|betalning bg|bg |pg |swish till|swish från/g," ");
+  s=s.replace(/\b\d{2,}[\d\-\/.:]*\b/g," ").replace(/[*#,·]/g," ").replace(/\s+/g," ").trim();
+  return s.split(" ").slice(0,3).join(" ")||t.toLowerCase();
+}
+// Card bill paid from the bank account: counts as spending until the card's own purchases are loaded for that period
+// (then pairTransfers marks the payment as a transfer instead).
+const AUTO=[[/betalning pg 4173300|pg 4173300-7 nordea/i,"Kortfaktura"],[/^inbetalning$|kreditkort|nordea.*kort|mastercard|betalning.*kort|egen överföring|överföring.*eget/i,TRANSFER],[/\blön\b|salary/i,"Lön"]];
+
+// Name each account by the last four digits of its account number, so two accounts stay apart.
+function accountLabel(fileName,isCard,head){
+  if(isCard)return "Kreditkort";
+  const m=(fileName+" "+head).match(/\b\d{4}[ -]?\d{2}[ -]?\d{5}\b|\b\d{6}-\d{4}\b|\b\d{11,14}\b/);
+  if(m){const d=m[0].replace(/\D/g,"");return "Konto ··"+d.slice(-4)}
+  const stem=fileName.replace(/\.[a-z]+$/i,"").replace(/\d{4}[-_.]?\d{2}[-_.]?\d{2}/g,"").replace(/export|transaktioner|kontoutdrag/ig,"").replace(/[_-]+/g," ").trim().slice(0,20);
+  return stem?"Konto "+stem:"Konto";
+}
+function addRows(src,rows){
+  const have=new Set(S.tx.map(x=>x.id));let n=0;
+  for(const r of rows){
+    // rows uploaded before accounts got their own names were all filed as "Konto"
+    const legacy=r.src.startsWith("Konto ")?"Konto"+r.id.slice(r.src.length):null;
+    if(!have.has(r.id)&&!(legacy&&have.has(legacy))){S.tx.push(r);n++}}
+  for(const r of rows){if(S.rules[r.key])continue;for(const[re,tag]of AUTO){if(re.test(r.text)){S.rules[r.key]=tag;if(!S.tags.includes(tag))S.tags.splice(S.tags.length-1,0,tag);break}}}
+  return n;
+}
+// Account numbers of your own uploaded accounts; "Överföring <one of them>" is always a transfer.
+function noteOwn(txt){const m=String(txt).match(/\b\d{4}[ -]?\d{2}[ -]?\d{5}\b|\b\d{6}-\d{4}\b|\b\d{11,14}\b/);if(!m)return;
+  const d=m[0].replace(/\D/g,"");const full=d.length>=11?[d,d.slice(4)]:[d];for(const x of full)if(!S.own.includes(x))S.own.push(x)}
+function tagOwnTransfers(){for(const t of S.tx){const m=t.key.match(/^överföring (\d+)$/);if(!m||S.rules[t.key])continue;
+  if(S.own.some(o=>m[1]===o||m[1].endsWith(o)||o.endsWith(m[1])))S.rules[t.key]=TRANSFER}}
+
+/* Money moving between your own accounts shows up twice: minus on one, plus on the other.
+   Match those pairs (same amount, opposite sign, different account, within 3 days) and tag both as transfers. */
+function pairTransfers(){
+  const byAmt={};let n=0;const day=d=>Date.parse(d)/864e5;
+  for(const t of S.tx){if(S.overrides[t.id])continue;const k=Math.round(Math.abs(t.amount)*100);(byAmt[k]=byAmt[k]||[]).push(t)}
+  for(const k in byAmt){const list=byAmt[k];if(list.length<2)continue;
+    const used=new Set();
+    for(const a of list){if(a.amount>=0||used.has(a))continue;
+      const b=list.find(x=>!used.has(x)&&x!==a&&x.amount>0&&x.src!==a.src&&Math.abs(day(x.date)-day(a.date))<=3);
+      if(b){used.add(a);used.add(b);S.overrides[a.id]=TRANSFER;S.overrides[b.id]=TRANSFER;n++}}}
+  return n;
+}
+
+/* ---------- PDF ---------- */
+let pdfReady=null;
+function loadScript(src){return new Promise((ok,no)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=()=>no(new Error("Kunde inte ladda PDF-läsaren."));document.head.appendChild(s)})}
+function pdfLib(){
+  // The worker runs on the main thread: loading it as a script sets window.pdfjsWorker, which pdf.js picks up.
+  if(!pdfReady){const b="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+    pdfReady=loadScript(b+"pdf.min.js").then(()=>loadScript(b+"pdf.worker.min.js")).then(()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc=b+"pdf.worker.min.js";return window.pdfjsLib})}
+  return pdfReady;
+}
+async function pdfLines(buf){
+  const lib=await pdfLib();
+  const doc=await lib.getDocument({data:new Uint8Array(buf),isEvalSupported:false}).promise;
+  const lines=[];
+  for(let p=1;p<=doc.numPages;p++){
+    const page=await doc.getPage(p);const tc=await page.getTextContent();
+    const rows=[];
+    for(const it of tc.items){if(!it.str||!it.str.trim())continue;const x=it.transform[4],y=it.transform[5];
+      let row=rows.find(r=>Math.abs(r.y-y)<3);if(!row){row={y,items:[]};rows.push(row)}row.items.push({x,s:it.str.trim()})}
+    rows.sort((a,b)=>b.y-a.y).forEach(r=>lines.push(r.items.sort((a,b)=>a.x-b.x).map(i=>i.s)));
+  }
+  return lines;
+}
+const RE_DATE=/^(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2}|\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4})$/;
+const RE_AMT=/^[-−+]?\d{1,3}(?:[ \u00a0.]?\d{3})*,\d{2}(?:\s?[-−])?$/;
+function pdfDate(s){const m=s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2})$/);if(m)s=m[1]+"."+m[2]+".20"+m[3];return parseDate(s)}
+function pdfAmount(s){s=s.replace(/\s/g,"");let neg=/^[-−]/.test(s)||/[-−]$/.test(s);s=s.replace(/[-−+]/g,"");const v=parseAmount(s);return neg?-v:v}
+async function parsePDF(buf,fileName){
+  const lines=await pdfLines(buf);
+  const isCard=/kort|card|credit|premium/i.test(fileName)||lines.slice(0,40).some(l=>/kreditkort|mastercard|premium/i.test(l.join(" ")));
+  const named=lines.slice(0,15).find(l=>l[0]==="Namn:"&&l[1]);
+  const nr=lines.slice(0,15).find(l=>l[0]==="Kontonummer:"&&l[1]);if(!isCard)noteOwn(nr?nr[1]:fileName);
+  const src=named&&!isCard?named[1]:accountLabel(fileName,isCard,lines.slice(0,15).map(l=>l.join(" ")).join(" "));
+  const rows=[];const seen={};
+  for(const cells0 of lines){
+    // merge "1 234,56" split into several items
+    const cells=[];for(const c of cells0){const prev=cells[cells.length-1];if(prev&&/^[-−]?\d{1,3}$/.test(prev)&&/^\d{3},\d{2}$/.test(c))cells[cells.length-1]=prev+" "+c;else cells.push(c)}
+    let i=0;const dates=[];
+    while(i<cells.length&&RE_DATE.test(cells[i])){dates.push(cells[i]);i++}
+    if(!dates.length)continue;
+    const date=pdfDate(dates[0]);if(!date)continue;
+    const amts=[];const text=[];
+    for(;i<cells.length;i++){const c=cells[i];if(RE_AMT.test(c.replace(/\s/g,"").replace(/^(.*\d)$/,"$1"))||RE_AMT.test(c))amts.push(c);else if(!amts.length&&!RE_DATE.test(c))text.push(c)}
+    if(!amts.length)continue;
+    const amount=pdfAmount(amts[0]);if(!isFinite(amount)||amount===0)continue;
+    const t=text.join(" ").replace(/\s+/g," ").trim()||"(ingen text)";
+    const base=src+"|"+date+"|"+amount.toFixed(2)+"|"+t;seen[base]=(seen[base]||0)+1;
+    rows.push({id:base+"|"+seen[base],src,date,amount,text:t,key:merchantKey(t)});
+  }
+  if(!rows.length)throw new Error("Hittade inga transaktionsrader i PDF:en. Skicka en skärmdump av en sida till Claude så justeras läsaren.");
+  const warn=rows.every(r=>r.amount>0)?"Alla belopp är positiva, kontrollera tecknen":"";
+  return {src,rows,warn};
+}
+
+async function handleFiles(files){
+  const msgs=[];
+  pending++; // hold incoming snapshots while files are read
+  if(S.sample){S=blank();}
+  const touched=new Set();
+  for(const f of files){
+    try{
+      const buf=await f.arrayBuffer();
+      if(/\.pdf$/i.test(f.name)||f.type==="application/pdf"){
+        const {src,rows,warn}=await parsePDF(buf,f.name);
+        const n=addRows(src,rows);monthsOf(rows).forEach(m=>touched.add(m));
+        msgs.push(f.name+": "+n+" nya rader ("+src.toLowerCase()+", från PDF)"+(warn?". "+warn:""));
+        continue;
+      }
+      let text=new TextDecoder("utf-8").decode(buf);
+      if(text.includes("\uFFFD"))text=new TextDecoder("windows-1252").decode(buf);
+      const {src,rows}=parseCSV(text,f.name);
+      const n=addRows(src,rows);monthsOf(rows).forEach(m=>touched.add(m));
+      msgs.push(f.name+": "+n+" nya rader ("+src.toLowerCase()+")");
+    }catch(e){msgs.push(f.name+": "+e.message)}
+  }
+  S.tx.sort((a,b)=>b.date.localeCompare(a.date));
+  tagOwnTransfers();const paired=pairTransfers();if(paired)msgs.push(paired+" flyttar mellan egna konton taggade som Överföring");
+  persistMonths([...touched]);save();pending--;drained();showNotice(msgs.join(" · "));render();
+}
+function showNotice(t){const n=document.getElementById("notice");n.textContent=t;n.hidden=!t}
+
+/* ---------- derived ---------- */
+function tagOf(t){return S.overrides[t.id]||S.rules[t.key]||""}
+function sign(t){return S.flips[t.src]?-t.amount:t.amount}
+function color(tag){const i=S.tags.indexOf(tag);return tag?PALETTE[(i<0?0:i)%PALETTE.length]:"var(--muted)"}
+const fmt=new Intl.NumberFormat("sv-SE",{maximumFractionDigits:0});
+function kr(v){return fmt.format(Math.round(v))+" kr"}
+function short(v){const a=Math.abs(v);return a>=1000?(v/1000).toLocaleString("sv-SE",{maximumFractionDigits:a>=10000?0:1})+"k":fmt.format(v)}
+function monthLabel(ym){const[y,m]=ym.split("-");return MONTHS[+m-1]+" "+y.slice(2)}
+
+function monthsInRange(){
+  const ms=[...new Set(S.tx.map(t=>t.date.slice(0,7)))].sort();
+  if(!ms.length)return[];
+  // fill gaps
+  const all=[];let [y,m]=ms[0].split("-").map(Number);const [ey,em]=ms[ms.length-1].split("-").map(Number);
+  while(y<ey||(y===ey&&m<=em)){all.push(y+"-"+String(m).padStart(2,"0"));m++;if(m>12){m=1;y++}}
+  return view.range?all.slice(-view.range):all;
+}
+function aggregate(months){
+  const set=new Set(months);const per={};months.forEach(m=>per[m]={inc:0,out:0,byTag:{}});
+  for(const t of S.tx){const m=t.date.slice(0,7);if(!set.has(m))continue;const tag=tagOf(t);if(tag===TRANSFER)continue;
+    const a=sign(t);const p=per[m];if(a>=0)p.inc+=a;else{p.out+=-a;const k=tag||"";p.byTag[k]=(p.byTag[k]||0)-a}}
+  return per;
+}
+
+/* ---------- render ---------- */
+function render(){
+  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===view.tab));
+  ["ov","tag","tx"].forEach(k=>document.getElementById("p-"+k).hidden=view.tab!==k);
+  renderSources();
+  const unt=untaggedGroups().length;const b=document.getElementById("badge");b.textContent=unt;b.hidden=!unt;
+  if(view.tab==="ov")renderOverview();else if(view.tab==="tag")renderTag();else renderTx();
+}
+function renderSources(){
+  const el=document.getElementById("sources");
+  if(S.sample){el.innerHTML="";showNotice("Du ser exempeldata. Ladda upp dina egna CSV-filer så ersätts den.");return}
+  const srcs=[...new Set(S.tx.map(t=>t.src))];
+  el.innerHTML=srcs.map(s=>{const n=S.tx.filter(t=>t.src===s);const d=n.map(t=>t.date).sort();
+    return `<div class="src"><b>${esc(s)}</b><small class="num">${n.length} rader · ${d[0]} – ${d[d.length-1]}</small><button data-flip="${esc(s)}" title="Använd om köp visas som inkomster">${S.flips[s]?"Tecken vänt":"Vänd tecken"}</button></div>`}).join("")+
+    (srcs.length?`<div class="src reset"><span>Börja om från noll</span><button data-reset="1">Rensa all data</button></div>`:"");
+}
+let confirmReset=false;
+document.getElementById("sources").addEventListener("click",e=>{
+  const f=e.target.dataset.flip;if(f){S.flips[f]=!S.flips[f];save();render();return}
+  if(e.target.dataset.reset){if(!confirmReset){confirmReset=true;e.target.textContent="Tryck igen för att rensa";return}
+    wipe();confirmReset=false;showNotice("All data rensad.");render()}
+});
+
+function curMonth(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")}
+function renderOverview(){
+  const p=document.getElementById("p-ov");
+  const months=monthsInRange();
+  if(!months.length){p.innerHTML=`<div class="empty">Ladda upp en CSV- eller PDF-fil för att komma igång.</div>`;return}
+  const per=aggregate(months);
+  // The running month is incomplete (salary may not have arrived), so it never feeds the averages
+  // and is not the default view.
+  const now=curMonth();const full=months.filter(m=>m<now);
+  const sel=view.month&&per[view.month]?view.month:(full[full.length-1]||months[months.length-1]);
+  view.cur=sel;
+  const P=per[sel];const net=P.inc-P.out;const i=months.indexOf(sel);
+  const byTag=P.byTag;const tagsUsed=Object.keys(byTag).sort((a,b)=>byTag[b]-byTag[a]);
+  const allTags=[...new Set(months.flatMap(m=>Object.keys(per[m].byTag)))].sort((a,b)=>S.tags.indexOf(a)-S.tags.indexOf(b));
+  const MF=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
+  const name=m=>MF[+m.slice(5)-1]+" "+m.slice(0,4);
+  p.innerHTML=`
+    <div class="row">
+      <div class="mnav"><button data-step="-1" aria-label="Föregående månad" ${i<=0?"disabled":""}>‹</button><h3>${name(sel)}${sel>=now?' <span class="pill">pågår</span>':""}</h3><button data-step="1" aria-label="Nästa månad" ${i>=months.length-1?"disabled":""}>›</button></div>
+      <div class="seg" role="group" aria-label="Period i grafen">${[[6,"6 mån"],[12,"12 mån"],[0,"Allt"]].map(([v,l])=>`<button data-range="${v}" aria-pressed="${view.range===v}">${l}</button>`).join("")}</div></div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">In</div><div class="v in num">${kr(P.inc)}</div></div>
+      <div class="kpi"><div class="l">Ut</div><div class="v out num">${kr(P.out)}</div></div>
+      <div class="kpi"><div class="l">Netto</div><div class="v num">${net>=0?"+":"−"}${kr(Math.abs(net))}</div></div>
+    </div>
+    <div class="card"><div class="chart">${chartSVG(months,per,allTags)}</div>
+      <div class="legend" style="margin-top:10px"><span><i class="dot" style="background:var(--in)"></i>Inkomst</span>${allTags.map(t=>`<span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span>`).join("")}<span><i class="dot" style="background:var(--ink);border-radius:50%"></i>Netto</span></div>
+      <p class="foot" style="margin:8px 0 0">Tryck på en månad i grafen för att visa den.</p></div>
+    <div class="card brk"><h2>Utgifter per tagg · ${name(sel)}</h2>
+      ${tagsUsed.length?tagsUsed.map(t=>`<div class="it"><span class="nm"><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><div class="bar"><i style="width:${byTag[t]/byTag[tagsUsed[0]]*100}%;background:${color(t)}"></i></div></div>`).join(""):`<div class="empty">Inga utgifter den här månaden.</div>`}
+    </div>`;
+}
+function chartSVG(months,per,tags){
+  const W=Math.max(340,months.length*46+60),H=260,L=46,R=10,T=14,B=26;
+  const maxIn=Math.max(1,...months.map(m=>per[m].inc)),maxOut=Math.max(1,...months.map(m=>per[m].out));
+  const step=niceStep(Math.max(maxIn,maxOut)/3);
+  const top=Math.ceil(maxIn/step)*step||step,bot=Math.ceil(maxOut/step)*step||step;
+  const ph=H-T-B;const y=v=>T+(top-v)/(top+bot)*ph;const bw=(W-L-R)/months.length;const w=Math.min(28,bw*.62);
+  let g="";
+  for(let v=-bot;v<=top;v+=step){g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="${v===0?1.5:1}"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="var(--f-num)">${short(v)}</text>`}
+  const netPts=[];
+  months.forEach((m,i)=>{
+    const cx=L+bw*i+bw/2,x=cx-w/2,p=per[m],dim=view.cur&&view.cur!==m?' opacity="0.3"':"";
+    g+=`<g data-month="${m}" style="cursor:pointer"${dim}><rect x="${L+bw*i}" y="${T}" width="${bw}" height="${ph}" fill="transparent"/>`;
+    if(p.inc>0)g+=`<rect x="${x}" y="${y(p.inc)}" width="${w}" height="${y(0)-y(p.inc)}" rx="2" fill="var(--in)"/>`;
+    let acc=0;for(const t of tags){const v=p.byTag[t]||0;if(!v)continue;g+=`<rect x="${x}" y="${y(-acc)}" width="${w}" height="${y(-acc-v)-y(-acc)}" fill="${color(t)}"><title>${t||"Otaggat"}: ${kr(v)}</title></rect>`;acc+=v}
+    g+=`<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10" fill="var(--muted)">${monthLabel(m)}</text></g>`;
+    netPts.push([cx,y(p.inc-p.out)]);
+  });
+  g+=`<polyline points="${netPts.map(p=>p.join(",")).join(" ")}" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round" pointer-events="none"/>`;
+  netPts.forEach(([x,yy])=>g+=`<circle cx="${x}" cy="${yy}" r="3" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5" pointer-events="none"/>`);
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Inkomster och utgifter per månad">${g}</svg>`;
+}
+function niceStep(v){const p=Math.pow(10,Math.floor(Math.log10(v||1)));for(const k of[1,2,2.5,5,10])if(k*p>=v)return k*p;return 10*p}
+
+document.getElementById("p-ov").addEventListener("click",e=>{
+  const r=e.target.closest("[data-range]");if(r){view.range=+r.dataset.range;view.month=null;render();return}
+  const st=e.target.closest("[data-step]");if(st){const ms=monthsInRange();const i=ms.indexOf(view.cur)+ +st.dataset.step;if(ms[i]){view.month=ms[i];render()}return}
+  const m=e.target.closest("[data-month]");if(m){view.month=m.dataset.month;render()}
+});
+
+/* tagging */
+// A group's tag is what its transactions actually carry: the place's rule, or per-transaction tags
+// such as transfers matched between your own accounts.
+function groups(){const g={};
+  for(const t of S.tx){const k=t.key;const x=(g[k]=g[k]||{key:k,label:t.text,n:0,sum:0,open:0,tags:new Set()});
+    x.n++;x.sum+=sign(t);const tg=tagOf(t);if(tg)x.tags.add(tg);else x.open++}
+  return Object.values(g).map(x=>(x.tag=x.open===0&&x.tags.size===1?[...x.tags][0]:"",x)).sort((a,b)=>Math.abs(b.sum)-Math.abs(a.sum))}
+function untaggedGroups(){return groups().filter(g=>g.open>0)}
+function renderTag(){
+  const p=document.getElementById("p-tag");
+  const all=groups();
+  // groups tagged during this visit stay in place, marked done, so the list doesn't jump under your finger
+  const un=all.filter(g=>g.open>0||view.just.has(g.key));const done=all.filter(g=>!(g.open>0||view.just.has(g.key)));
+  const left=all.filter(g=>g.open>0).length;
+  const grp=g=>{const isDone=g.open===0;const how=g.tag?`Taggat: ${esc(g.tag)}`:(isDone?"Taggat per transaktion":(g.tags.size?`${g.open} av ${g.n} otaggade`:""));
+    return `<div class="grp${isDone&&view.just.has(g.key)?" done":""}"><div class="h"><span class="n">${esc(g.label)}</span><span class="meta num">${g.n} st · ${g.sum>=0?"+":"−"}${kr(Math.abs(g.sum))}</span></div>
+    ${how?`<div class="state">${isDone?"✓ ":""}${how}</div>`:""}
+    <div class="chips">${S.tags.map(t=>`<button class="chip" data-key="${esc(g.key)}" data-tag="${esc(t)}" aria-pressed="${g.tag===t}"><i class="dot" style="background:${color(t)}"></i>${esc(t)}</button>`).join("")}</div></div>`};
+  p.innerHTML=`
+    <div class="row"><h2>${left?left+" otaggade, störst belopp först":"Allt är taggat"}</h2></div>
+    <p class="sub" style="margin:0">Taggen gäller alla köp från samma ställe, även i filer du laddar upp senare.</p>
+    <form class="addtag" id="addtag"><input id="newtag" placeholder="Ny tagg, t.ex. Barn" maxlength="24" aria-label="Ny tagg"><button class="btn ghost" type="submit">Lägg till</button></form>
+    <div class="groups">${un.map(grp).join("")||`<div class="empty">Snyggt. Nya köp som behöver en tagg dyker upp här.</div>`}</div>
+    ${done.length?`<details ${view.showTagged?"open":""} id="donebox"><summary>Redan taggade (${done.length})</summary><div class="groups" style="margin-top:10px">${done.map(grp).join("")}</div></details>`:""}`;
+}
+document.getElementById("p-tag").addEventListener("click",e=>{
+  const c=e.target.closest(".chip");if(!c)return;const k=c.dataset.key,t=c.dataset.tag;
+  const g=groups().find(x=>x.key===k);const off=g&&g.tag===t;
+  if(off)delete S.rules[k];else S.rules[k]=t;
+  // the place's tag replaces per-transaction tags in this group
+  for(const x of S.tx)if(x.key===k)delete S.overrides[x.id];
+  view.just.add(k);
+  view.showTagged=!!document.getElementById("donebox")?.open;save();render();
+});
+document.getElementById("p-tag").addEventListener("submit",e=>{
+  e.preventDefault();const i=document.getElementById("newtag");const v=i.value.trim();
+  if(v&&!S.tags.includes(v)){S.tags.splice(S.tags.length-1,0,v);save();render();}
+});
+
+/* transactions */
+function renderTx(){
+  const p=document.getElementById("p-tx");
+  if(!p.dataset.ready){p.innerHTML=`<div class="filters"><input id="q" placeholder="Sök" aria-label="Sök"><select id="tf" aria-label="Filtrera på tagg"></select></div><div class="txl" id="txl"></div>`;p.dataset.ready=1;
+    p.querySelector("#q").addEventListener("input",e=>{view.q=e.target.value;renderTxList()});
+    p.querySelector("#tf").addEventListener("change",e=>{view.tf=e.target.value;renderTxList()});}
+  const tf=p.querySelector("#tf");tf.innerHTML=`<option value="">Alla taggar</option><option value="__none">Otaggat</option>`+S.tags.map(t=>`<option>${esc(t)}</option>`).join("");tf.value=view.tf;
+  renderTxList();
+}
+function renderTxList(){
+  const q=view.q.toLowerCase();
+  let rows=S.tx.filter(t=>(!q||t.text.toLowerCase().includes(q))&&(!view.tf||(view.tf==="__none"?!tagOf(t):tagOf(t)===view.tf)));
+  const total=rows.length;rows=rows.slice(0,300);
+  document.getElementById("txl").innerHTML=rows.map(t=>{const a=sign(t),tg=tagOf(t);
+    return`<div class="tx"><span class="d num">${t.date.slice(5)}</span><span class="t">${esc(t.text)} <span class="s">${t.src}</span></span><span class="a num ${a>=0?"in":""}">${a>=0?"+":"−"}${fmt.format(Math.abs(a))}</span>
+    <select data-id="${esc(t.id)}" aria-label="Tagg"><option value="">${tg?"":"Otaggat"}</option>${S.tags.map(x=>`<option ${x===tg?"selected":""}>${esc(x)}</option>`).join("")}</select></div>`}).join("")
+    +(total>300?`<div class="empty">Visar 300 av ${total}. Sök för att hitta fler.</div>`:"")||`<div class="empty">Inga transaktioner matchar.</div>`;
+}
+document.getElementById("p-tx").addEventListener("change",e=>{
+  const s=e.target.closest("select[data-id]");if(!s)return;
+  if(s.value)S.overrides[s.dataset.id]=s.value;else delete S.overrides[s.dataset.id];save();
+});
+
+/* ---------- wiring ---------- */
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+document.querySelector(".tabs").addEventListener("click",e=>{const b=e.target.closest(".tab");if(b){view.tab=b.dataset.tab;view.just.clear();render()}});
+const input=document.getElementById("file");input.addEventListener("change",()=>{handleFiles([...input.files]);input.value=""});
+const drop=document.getElementById("drop");
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>handleFiles([...e.dataTransfer.files]));
+
+/* ---------- sample data (example only) ---------- */
+function sampleState(){
+  const s=blank();s.sample=true;
+  const now=new Date(2026,9,1);let seed=7;const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280};
+  const shops=[["ICA Kvantum Malmborgs","Mat",-650,6],["Willys Malmö","Mat",-420,4],["Skånetrafiken","Transport",-990,1],["Pinchos Möllan","Restaurang",-380,3],["Spotify","Prenumerationer",-129,1],["Netflix","Prenumerationer",-149,1],["Apotek Hjärtat","Hälsa",-210,1],["Clas Ohlson","Hem",-540,1],["Biljettkiosken","Nöje",-450,1],["Systembolaget","Mat",-310,2]];
+  for(let k=11;k>=0;k--){const d=new Date(now.getFullYear(),now.getMonth()-k,1);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0");
+    const day=n=>y+"-"+m+"-"+String(n).padStart(2,"0");
+    s.tx.push({id:"s-l"+k,src:"Konto",date:day(25),amount:42500,text:"LÖN ACME AB",key:"lön acme ab"});
+    s.tx.push({id:"s-h"+k,src:"Konto",date:day(28),amount:-11800,text:"Hyra HSB Malmö",key:"hyra hsb malmö"});
+    s.tx.push({id:"s-p"+k,src:"Konto",date:day(27),amount:-(6000+Math.round(rnd()*4000)),text:"Betalning Nordea kreditkort",key:"nordea kreditkort"});
+    s.tx.push({id:"s-i"+k,src:"Kreditkort",date:day(27),amount:6000,text:"Inbetalning",key:"inbetalning"});
+    shops.forEach(([n,tag,base,times],j)=>{for(let r=0;r<times;r++)s.tx.push({id:"s-"+k+"-"+j+"-"+r,src:"Kreditkort",date:day(2+Math.floor(rnd()*25)),amount:Math.round(base*(.6+rnd()*.8)),text:n,key:n.toLowerCase()})});
+  }
+  s.tx.push({id:"s-x1",src:"Kreditkort",date:"2026-09-14",amount:-2390,text:"Stadium Triangeln",key:"stadium triangeln"});
+  s.tx.push({id:"s-x2",src:"Kreditkort",date:"2026-08-03",amount:-860,text:"Swish till 0701234567",key:"swish till"});
+  s.rules={"lön acme ab":"Lön","hyra hsb malmö":"Hem","nordea kreditkort":TRANSFER,"inbetalning":TRANSFER};
+  shops.forEach(([n,tag])=>s.rules[n.toLowerCase()]=tag);
+  s.tx.sort((a,b)=>b.date.localeCompare(a.date));
+  return s;
+}
+render();
+boot();
+})();
+</script>
+</body>
+</html>
