@@ -22,3 +22,4 @@ Personal income/expense overview from Nordea exports (account PDFs, card CSV). S
 - Transfers between your own accounts are matched (same amount, opposite sign, different account, ≤3 days apart) and tagged `Överföring`, which is excluded from totals. `Överföring <your own account number>` is always a transfer.
 - Card bill payments (`Betalning PG 4173300-7`) are tagged `Kortfaktura` and count as spending until the card's own purchases for that period are loaded; then the payment pairs with the card's `INBETALNING` and drops out.
 - The running month is labelled "pågår"; the overview opens on the last complete month.
+- `./release.sh` before each commit stamps a build id; open Home Screen apps compare it with `/version.txt` and reload when it changes.
