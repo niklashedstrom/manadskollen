@@ -7,7 +7,7 @@ Personal income/expense overview from Nordea exports (account PDFs, card CSV). S
 - `index.html` – the whole app. Parses CSV and PDF in the browser (pdf.js, loaded on first PDF), so bank files never leave the device as files; only the parsed rows go to the database.
 - `config.js` – Supabase URL and anon key. Public by design; row-level security restricts each signed-in user to their own rows.
 - `supabase/migrations/0001_init.sql` – `transactions` (one row per bank transaction, primary key `(user_id, id)` so re-uploads dedupe) and `settings` (tag rules, per-transaction tags, own account numbers).
-- Sign-in is a magic link by email (Supabase Auth).
+- Sign-in is a one-time code by email (Supabase Auth `signInWithOtp` + `verifyOtp`), so it works in any browser or home-screen app regardless of where the mail client opens links. The Magic Link email template must include `{{ .Token }}`.
 
 ## Setup
 

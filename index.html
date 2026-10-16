@@ -152,9 +152,11 @@ details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
 
   <section class="login" id="login" hidden>
     <h2>Logga in</h2>
-    <p>Du får en inloggningslänk via mejl. Öppna den på enheten du vill använda.</p>
-    <form id="loginform"><input type="email" id="email" required autocomplete="email" placeholder="din@epost.se" aria-label="E-post"><button class="btn" type="submit">Skicka länk</button></form>
+    <p id="loginhelp">Du får en kod via mejl. Skriv in den här, i den webbläsare du vill vara inloggad i.</p>
+    <form id="loginform"><input type="email" id="email" required autocomplete="email" placeholder="din@epost.se" aria-label="E-post"><button class="btn" type="submit">Skicka kod</button></form>
+    <form id="codeform" hidden><input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" maxlength="10" required placeholder="Kod från mejlet" aria-label="Kod"><button class="btn" type="submit">Logga in</button></form>
     <p id="loginmsg" role="status"></p>
+    <button class="linkbtn" id="otheremail" hidden>Byt e-postadress</button>
   </section>
   <div id="app" hidden>
 
@@ -270,9 +272,22 @@ document.getElementById("loginform").addEventListener("submit",async e=>{
   e.preventDefault();const email=document.getElementById("email").value.trim();const msg=document.getElementById("loginmsg");
   if(!sb){msg.textContent="Databasen är inte konfigurerad.";return}
   msg.textContent="Skickar…";
-  const{error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin}});
-  msg.textContent=error?"Det gick inte: "+error.message:"Kolla mejlen och öppna länken.";
+  const{error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin,shouldCreateUser:false}});
+  if(error){msg.textContent="Det gick inte: "+error.message;return}
+  try{localStorage.setItem("mk-email",email)}catch(_){}
+  codeStep(true);msg.textContent="Kod skickad till "+email+". Den gäller i en timme.";
+  document.getElementById("code").focus();
 });
+function codeStep(on){document.getElementById("loginform").hidden=on;document.getElementById("codeform").hidden=!on;document.getElementById("otheremail").hidden=!on}
+document.getElementById("otheremail").addEventListener("click",()=>{codeStep(false);document.getElementById("loginmsg").textContent=""});
+document.getElementById("codeform").addEventListener("submit",async e=>{
+  e.preventDefault();const msg=document.getElementById("loginmsg");
+  const email=document.getElementById("email").value.trim();const token=document.getElementById("code").value.replace(/\D/g,"");
+  msg.textContent="Loggar in…";
+  const{error}=await sb.auth.verifyOtp({email,token,type:"email"});
+  msg.textContent=error?(/expired|invalid/i.test(error.message)?"Koden stämmer inte eller har gått ut. Skicka en ny.":"Det gick inte: "+error.message):"";
+});
+try{const em=localStorage.getItem("mk-email");if(em)document.getElementById("email").value=em}catch(_){}
 
 /* ---------- parsing ---------- */
 function splitLine(line,d){const out=[];let cur="",q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c=='"'){if(q&&line[i+1]=='"'){cur+='"';i++}else q=!q}else if(c===d&&!q){out.push(cur);cur=""}else cur+=c}out.push(cur);return out.map(s=>s.trim())}
