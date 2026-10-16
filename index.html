@@ -131,6 +131,8 @@ button,select,input{font:inherit;color:inherit}
 .empty{color:var(--muted);text-align:center;padding:24px}
 .foot{font-size:.8rem;color:var(--muted)}
 .sync{display:flex;align-items:center;gap:6px;margin:6px 0 0;font-size:.8rem;color:var(--muted)}
+.refresh{margin-left:6px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:.78rem;color:var(--ink);cursor:pointer}
+.refresh:active{background:var(--soft)}
 .sync i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
 .sync[data-s="ok"] i{background:var(--in)}.sync[data-s="busy"] i{background:#d49a2a}.sync[data-s="err"] i,.sync[data-s="local"] i{background:var(--out)}
 .grp .state{font-size:.82rem;color:var(--in);font-weight:600;margin-top:-4px}
@@ -174,7 +176,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
     <div>
       <h1>Månadskollen</h1>
       <p class="sub">Inkomster och utgifter från Nordea-konto och kreditkort</p>
-      <p class="sync" id="sync"><i></i><span>Ansluter…</span></p>
+      <p class="sync" id="sync"><i></i><span>Ansluter…</span><button class="refresh" id="refresh" aria-label="Uppdatera">↻ Uppdatera</button></p>
     </div>
   </header>
 
@@ -238,6 +240,13 @@ function saveLocal(){try{if(!S.sample)localStorage.setItem(KEY,JSON.stringify(S)
 const CFG=window.MK_CONFIG||{};
 let sb=null,user=null,metaTimer=null,queue=Promise.resolve(),pending=0,lastPull=0;
 function setSync(st,txt){const el=document.getElementById("sync");el.dataset.s=st;el.querySelector("span").textContent=txt}
+// Home Screen apps have no reload gesture: fetch the newest page past any cache, after pending saves finish.
+document.getElementById("refresh").addEventListener("click",async()=>{
+  const b=document.getElementById("refresh");b.disabled=true;b.textContent="↻ Uppdaterar…";
+  if(metaTimer)await new Promise(r=>setTimeout(r,700)); // let a waiting tag save start
+  try{await queue}catch(_){}
+  location.replace(location.pathname+"?r="+Date.now());
+});
 function enqueue(fn){pending++;setSync("busy","Sparar…");queue=queue.then(fn).then(()=>{if(--pending===0)setSync("ok","Synkad")},e=>{pending--;console.error(e);
   setSync("err","Kunde inte spara: "+(e&&e.message||"okänt fel"))});return queue}
 function drained(){}
@@ -300,7 +309,8 @@ async function boot(){
 }
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
-const BUILD="20261016080427";
+if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
+const BUILD="20261016080545";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
