@@ -84,9 +84,25 @@ button,select,input{font:inherit;color:inherit}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .dot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
 .brk{display:flex;flex-direction:column;gap:10px}
-.brk .it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:baseline}
+.brk{gap:4px}
+.brk h2{margin-bottom:6px}
+.brk .it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:baseline;width:100%;background:none;border:0;padding:8px 0;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.brk .chev{display:inline-block;width:.8em;color:var(--muted);transition:transform .15s}
+.brk .open .chev{transform:rotate(90deg)}
+.det{display:flex;flex-direction:column;margin:0 0 10px 1.3em;border-left:2px solid var(--line);padding-left:10px}
+.pl{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:baseline;background:none;border:0;border-top:1px solid var(--line);padding:8px 0;text-align:left;cursor:pointer;font:inherit;color:inherit;font-size:.9rem}
+.pl:first-child{border-top:0}
+.pn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc{color:var(--muted);font-size:.78rem}
+.ps{font-size:.85rem}
+.buys{display:flex;flex-direction:column;background:var(--soft);border-radius:8px;padding:4px 10px;margin-bottom:6px}
+.buy{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:5px 0;font-size:.82rem}
+.buy .num:first-child{color:var(--muted);font-size:.75rem}
+.bt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt small{color:var(--muted);margin-left:6px;font-size:.72rem}
+.retag{align-self:flex-start;margin-top:8px;font-size:.82rem}
 .brk .nm{display:flex;align-items:center;gap:8px;min-width:0}
-.brk .bar{grid-column:1/-1;height:6px;background:var(--soft);border-radius:3px;overflow:hidden}
+.brk .bar{display:block;grid-column:1/-1;height:6px;background:var(--soft);border-radius:3px;overflow:hidden}
 .brk .bar i{display:block;height:100%;border-radius:3px}
 .brk .am{font-size:.88rem;text-align:right}
 .brk .am small{color:var(--muted);display:block;font-size:.75rem}
@@ -569,8 +585,18 @@ function renderOverview(){
       <div class="legend" style="margin-top:10px"><span><i class="dot" style="background:var(--in)"></i>Inkomst</span>${allTags.map(t=>`<span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span>`).join("")}<span><i class="dot" style="background:var(--ink);border-radius:50%"></i>Netto</span></div>
       <p class="foot" style="margin:8px 0 0">Tryck på en månad i grafen för att visa den.</p></div>
     <div class="card brk"><h2>Utgifter per tagg · ${name(sel)}</h2>
-      ${tagsUsed.length?tagsUsed.map(t=>`<div class="it"><span class="nm"><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><div class="bar"><i style="width:${byTag[t]/byTag[tagsUsed[0]]*100}%;background:${color(t)}"></i></div></div>`).join(""):`<div class="empty">Inga utgifter den här månaden.</div>`}
+      ${tagsUsed.length?tagsUsed.map(t=>{const open=view.openTag===t;return`<div class="cat${open?" open":""}"><button class="it" data-cat="${esc(t)}" aria-expanded="${open}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tagsUsed[0]]*100}%;background:${color(t)}"></i></span></button>${open?catDetail(sel,t):""}</div>`}).join(""):`<div class="empty">Inga utgifter den här månaden.</div>`}
     </div>`;
+}
+// What one tag consists of in one month: places by total, each place opening to its purchases.
+function catDetail(month,tag){
+  const rows=S.tx.filter(t=>t.date.startsWith(month)&&sign(t)<0&&(tagOf(t)||"")===tag);
+  const g={};for(const t of rows){const x=(g[t.key]=g[t.key]||{key:t.key,label:t.text,sum:0,items:[]});x.sum-=sign(t);x.items.push(t)}
+  const places=Object.values(g).sort((a,b)=>b.sum-a.sum);
+  return `<div class="det">${places.map(p=>{const open=view.openPlace===p.key;
+    return `<button class="pl" data-place="${esc(p.key)}" aria-expanded="${open}"><span class="pn">${esc(p.label)}</span><span class="num pc">${p.items.length} st</span><span class="num ps">${kr(p.sum)}</span></button>
+    ${open?`<div class="buys">${p.items.sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`<div class="buy"><span class="num">${t.date.slice(8)}/${+t.date.slice(5,7)}</span><span class="bt">${esc(t.text)}<small>${esc(t.src)}</small></span><span class="num">${kr(-sign(t))}</span></div>`).join("")}</div>`:""}`}).join("")}
+    <button class="linkbtn retag" data-retag="${esc(tag)}">Visa i Transaktioner</button></div>`;
 }
 function chartSVG(months,per,tags){
   const W=Math.max(340,months.length*46+60),H=260,L=46,R=10,T=14,B=26;
@@ -597,8 +623,11 @@ function niceStep(v){const p=Math.pow(10,Math.floor(Math.log10(v||1)));for(const
 
 document.getElementById("p-ov").addEventListener("click",e=>{
   const r=e.target.closest("[data-range]");if(r){view.range=+r.dataset.range;view.month=null;render();return}
-  const st=e.target.closest("[data-step]");if(st){const ms=monthsInRange();const i=ms.indexOf(view.cur)+ +st.dataset.step;if(ms[i]){view.month=ms[i];render()}return}
-  const m=e.target.closest("[data-month]");if(m){view.month=m.dataset.month;render()}
+  const st=e.target.closest("[data-step]");if(st){const ms=monthsInRange();const i=ms.indexOf(view.cur)+ +st.dataset.step;if(ms[i]){view.month=ms[i];view.openPlace=null;render()}return}
+  const c=e.target.closest("[data-cat]");if(c){const t=c.dataset.cat;view.openTag=view.openTag===t?null:t;view.openPlace=null;render();return}
+  const pl=e.target.closest("[data-place]");if(pl){const k=pl.dataset.place;view.openPlace=view.openPlace===k?null:k;render();return}
+  const rt=e.target.closest("[data-retag]");if(rt){view.tab="tx";view.tf=rt.dataset.retag||"__none";view.q="";render();return}
+  const m=e.target.closest("[data-month]");if(m){view.month=m.dataset.month;view.openTag=null;render()}
 });
 
 /* tagging */
@@ -646,7 +675,7 @@ function renderTx(){
   if(!p.dataset.ready){p.innerHTML=`<div class="filters"><input id="q" placeholder="Sök" aria-label="Sök"><select id="tf" aria-label="Filtrera på tagg"></select></div><div class="txl" id="txl"></div>`;p.dataset.ready=1;
     p.querySelector("#q").addEventListener("input",e=>{view.q=e.target.value;renderTxList()});
     p.querySelector("#tf").addEventListener("change",e=>{view.tf=e.target.value;renderTxList()});}
-  const tf=p.querySelector("#tf");tf.innerHTML=`<option value="">Alla taggar</option><option value="__none">Otaggat</option>`+S.tags.map(t=>`<option>${esc(t)}</option>`).join("");tf.value=view.tf;
+  const tf=p.querySelector("#tf");tf.innerHTML=`<option value="">Alla taggar</option><option value="__none">Otaggat</option>`+S.tags.map(t=>`<option>${esc(t)}</option>`).join("");tf.value=view.tf;p.querySelector("#q").value=view.q;
   renderTxList();
 }
 function renderTxList(){
