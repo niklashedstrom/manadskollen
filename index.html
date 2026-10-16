@@ -126,6 +126,11 @@ details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
 .login h2{font-size:1rem;text-transform:none;letter-spacing:0;color:var(--ink)}
 .login p{margin:0;color:var(--muted)}
 .login form{display:flex;gap:8px;flex-wrap:wrap}
+.login .stack{flex-direction:column}
+.login .stack input{flex:none}
+.login .hint{font-size:.85rem}
+.pwbox{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.pwbox input{flex:1 1 180px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px}
 .login input{flex:1 1 200px;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px}
 .linkbtn{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:inherit;text-decoration:underline}
 #app{display:contents}
@@ -152,11 +157,13 @@ details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
 
   <section class="login" id="login" hidden>
     <h2>Logga in</h2>
-    <p id="loginhelp">Du får en kod via mejl. Skriv in den här, i den webbläsare du vill vara inloggad i.</p>
-    <form id="loginform"><input type="email" id="email" required autocomplete="email" placeholder="din@epost.se" aria-label="E-post"><button class="btn" type="submit">Skicka kod</button></form>
-    <form id="codeform" hidden><input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" maxlength="10" required placeholder="Kod från mejlet" aria-label="Kod"><button class="btn" type="submit">Logga in</button></form>
+    <form id="loginform" class="stack">
+      <input type="email" id="email" required autocomplete="username" placeholder="din@epost.se" aria-label="E-post">
+      <input type="password" id="password" required autocomplete="current-password" placeholder="Lösenord" aria-label="Lösenord">
+      <button class="btn" type="submit">Logga in</button>
+    </form>
     <p id="loginmsg" role="status"></p>
-    <button class="linkbtn" id="otheremail" hidden>Byt e-postadress</button>
+    <p class="hint">Inget lösenord än, eller glömt det? <button class="linkbtn" id="sendlink">Skicka inloggningslänk</button>. Länken öppnas i din standardwebbläsare, och där kan du sätta ett lösenord längst ner på sidan.</p>
   </section>
   <div id="app" hidden>
 
@@ -252,7 +259,8 @@ async function pull(){
 }
 
 function showApp(on){document.getElementById("app").hidden=!on;document.getElementById("login").hidden=on}
-function whoLine(){const w=document.getElementById("who");w.innerHTML=user?`Inloggad som ${esc(user.email||"")} · <button class="linkbtn" id="logout">Logga ut</button>.`:""}
+function whoLine(){const w=document.getElementById("who");w.innerHTML=user?`Inloggad som ${esc(user.email||"")} · <button class="linkbtn" id="setpw">Sätt lösenord</button> · <button class="linkbtn" id="logout">Logga ut</button>.
+  <form class="pwbox" id="pwbox" hidden><input type="password" id="newpw" autocomplete="new-password" placeholder="Nytt lösenord, minst 8 tecken" aria-label="Nytt lösenord"><button class="btn" type="submit">Spara</button><span id="pwmsg" role="status"></span></form>`:""}
 async function boot(){
   if(!window.supabase||!CFG.url||!CFG.anonKey){setSync("local","Ingen databas konfigurerad, sparas bara i den här webbläsaren");
     const l=load();if(l.tx.length)S=l;showApp(true);render();return}
@@ -269,23 +277,33 @@ async function boot(){
 }
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 document.getElementById("loginform").addEventListener("submit",async e=>{
-  e.preventDefault();const email=document.getElementById("email").value.trim();const msg=document.getElementById("loginmsg");
+  e.preventDefault();const msg=document.getElementById("loginmsg");
   if(!sb){msg.textContent="Databasen är inte konfigurerad.";return}
+  const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;
+  msg.textContent="Loggar in…";
+  const{error}=await sb.auth.signInWithPassword({email,password});
+  if(error){msg.textContent=/invalid/i.test(error.message)?"Fel e-post eller lösenord. Har du inte satt ett lösenord än, använd länken nedan.":"Det gick inte: "+error.message;return}
+  msg.textContent="";try{localStorage.setItem("mk-email",email)}catch(_){}
+});
+document.getElementById("sendlink").addEventListener("click",async()=>{
+  const msg=document.getElementById("loginmsg");const email=document.getElementById("email").value.trim();
+  if(!email){msg.textContent="Skriv in din e-post först.";document.getElementById("email").focus();return}
   msg.textContent="Skickar…";
   const{error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin,shouldCreateUser:false}});
-  if(error){msg.textContent="Det gick inte: "+error.message;return}
-  try{localStorage.setItem("mk-email",email)}catch(_){}
-  codeStep(true);msg.textContent="Kod skickad till "+email+". Den gäller i en timme.";
-  document.getElementById("code").focus();
+  msg.textContent=error?"Det gick inte: "+error.message:"Länk skickad till "+email+".";
 });
-function codeStep(on){document.getElementById("loginform").hidden=on;document.getElementById("codeform").hidden=!on;document.getElementById("otheremail").hidden=!on}
-document.getElementById("otheremail").addEventListener("click",()=>{codeStep(false);document.getElementById("loginmsg").textContent=""});
-document.getElementById("codeform").addEventListener("submit",async e=>{
-  e.preventDefault();const msg=document.getElementById("loginmsg");
-  const email=document.getElementById("email").value.trim();const token=document.getElementById("code").value.replace(/\D/g,"");
-  msg.textContent="Loggar in…";
-  const{error}=await sb.auth.verifyOtp({email,token,type:"email"});
-  msg.textContent=error?(/expired|invalid/i.test(error.message)?"Koden stämmer inte eller har gått ut. Skicka en ny.":"Det gick inte: "+error.message):"";
+// set or change password while signed in
+document.addEventListener("click",e=>{
+  if(e.target.id==="setpw"){const box=document.getElementById("pwbox");box.hidden=!box.hidden;if(!box.hidden)document.getElementById("newpw").focus()}
+});
+document.addEventListener("submit",async e=>{
+  if(e.target.id!=="pwbox")return;e.preventDefault();
+  const pw=document.getElementById("newpw").value,m=document.getElementById("pwmsg");
+  if(pw.length<8){m.textContent="Minst 8 tecken.";return}
+  m.textContent="Sparar…";
+  const{error}=await sb.auth.updateUser({password:pw});
+  m.textContent=error?"Det gick inte: "+error.message:"Lösenordet är sparat. Logga in med det i andra webbläsare.";
+  if(!error){document.getElementById("newpw").value=""}
 });
 try{const em=localStorage.getItem("mk-email");if(em)document.getElementById("email").value=em}catch(_){}
 
