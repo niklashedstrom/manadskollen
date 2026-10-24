@@ -228,7 +228,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
 const KEY="manadskollen-v1";
 const TRANSFER="Överföring";
 const PALETTE=["#1f5f8b","#c4553a","#d49a2a","#6b4fa0","#2e8f8a","#b04a7a","#5f7d2f","#8a6a4a","#3f6fd1","#9a9a2a","#7a8a99"];
-const DEFAULT_TAGS=["Mat","Restaurang","Hem","Transport","Nöje","Shopping","Hälsa","Prenumerationer","Sparande","Lön",TRANSFER,"Övrigt"];
+const DEFAULT_TAGS=["Mat","Restaurang","Alkohol","Hem","Transport","Nöje","Shopping","Hälsa","Prenumerationer","Sparande","Lön",TRANSFER,"Övrigt"];
 const MONTHS=["jan","feb","mar","apr","maj","jun","jul","aug","sep","okt","nov","dec"];
 
 let S=sampleState();
@@ -314,7 +314,7 @@ async function boot(){
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
 if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
-const BUILD="20261024105706";
+const BUILD="20261024120313";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
