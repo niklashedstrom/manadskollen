@@ -127,8 +127,20 @@ button,select,input{font:inherit;color:inherit}
 .tx .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tx .a{text-align:right}
 .tx .a.in{color:var(--in)}
-.tx select{grid-column:2/4;justify-self:start;border:0;background:var(--soft);border-radius:6px;padding:2px 6px;font-size:.8rem;max-width:100%}
+.tx > select{grid-column:2/4;justify-self:start;border:0;background:var(--soft);border-radius:6px;padding:2px 6px;font-size:.8rem;max-width:100%}
 .tx .s{font-size:.72rem;color:var(--muted)}
+.tx .sp{grid-column:2/4;font-size:.78rem;color:var(--muted)}
+.split{grid-column:1/4;display:flex;flex-direction:column;gap:8px;background:var(--soft);border-radius:10px;padding:10px;margin-top:6px}
+.split .sr{display:grid;grid-template-columns:minmax(0,1fr) 5.2em 5em 24px;gap:8px;align-items:center}
+.split select{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 6px;font-size:.85rem;min-width:0}
+.split .pc{display:flex;align-items:center;gap:3px;font-size:.85rem}
+.split .pc input{width:3.6em;border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:.85rem;background:var(--surface)}
+.split .rest{font-size:.8rem;color:var(--muted);white-space:nowrap}
+.split .sa{text-align:right;font-size:.85rem}
+.split .srm{border:0;background:none;font-size:1.1rem;color:var(--muted);cursor:pointer;padding:0}
+.split [data-sadd]{align-self:flex-start;font-size:.85rem}
+.split .sbtns{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.split .smsg{font-size:.8rem;color:var(--out)}
 .empty{color:var(--muted);text-align:center;padding:24px}
 .foot{font-size:.8rem;color:var(--muted)}
 .sync{display:flex;align-items:center;gap:6px;margin:6px 0 0;font-size:.8rem;color:var(--muted)}
@@ -232,11 +244,11 @@ const DEFAULT_TAGS=["Mat","Restaurang","Alkohol","Hem","Transport","Nöje","Shop
 const MONTHS=["jan","feb","mar","apr","maj","jun","jul","aug","sep","okt","nov","dec"];
 
 let S=sampleState();
-let view={just:new Set(),tab:"ov",gran:"m",ranges:{m:12,q:8,y:0},month:null,q:"",tf:"",showTagged:false};
+let view={just:new Set(),tab:"ov",sd:null,gran:"m",ranges:{m:12,q:8,y:0},month:null,q:"",tf:"",showTagged:false};
 // the chosen grouping (month, quarter, year) is remembered per browser
 try{const g=localStorage.getItem("mk-gran");if(g&&"mqy".includes(g)&&g.length===1)view.gran=g}catch(_){}
 
-function blank(){return{uploads:[],own:[],tx:[],rules:{},overrides:{},tags:DEFAULT_TAGS.slice(),flips:{},sample:false}}
+function blank(){return{uploads:[],own:[],tx:[],rules:{},overrides:{},splits:{},tags:DEFAULT_TAGS.slice(),flips:{},sample:false}}
 function load(){try{const r=localStorage.getItem(KEY);if(r){const s=JSON.parse(r);return Object.assign(blank(),s)}}catch(e){}return sampleState()}
 function saveLocal(){try{if(!S.sample)localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 
@@ -263,7 +275,7 @@ function persistMonths(ms){if(!sb){saveLocal();return}
 function save(){if(!sb){saveLocal();return}if(S.sample)return;
   if(!metaTimer)pending++; // a waiting settings write blocks pulls
   clearTimeout(metaTimer);
-  metaTimer=setTimeout(()=>{metaTimer=null;pending--;const body={rules:S.rules,overrides:S.overrides,tags:S.tags,flips:S.flips,own:S.own,uploads:S.uploads,updated_at:new Date().toISOString()};
+  metaTimer=setTimeout(()=>{metaTimer=null;pending--;const body={rules:S.rules,overrides:S.overrides,splits:S.splits,tags:S.tags,flips:S.flips,own:S.own,uploads:S.uploads,updated_at:new Date().toISOString()};
     enqueue(async()=>{const{error}=await sb.from("mk_settings").upsert(body,{onConflict:"user_id"});if(error)throw error})},500)}
 function wipe(){S=blank();
   if(!sb){try{localStorage.removeItem(KEY)}catch(_){}return}
@@ -278,7 +290,7 @@ async function pull(){
     for(let from=0;;from+=1000){
       const{data,error}=await sb.from("mk_transactions").select("id,src,date,amount,text,key").order("date",{ascending:false}).order("id").range(from,from+999);
       if(error)throw error;all.push(...data);if(data.length<1000)break}
-    const{data:st,error:e2}=await sb.from("mk_settings").select("rules,overrides,tags,flips,own,uploads").maybeSingle();if(e2)throw e2;
+    const{data:st,error:e2}=await sb.from("mk_settings").select("rules,overrides,splits,tags,flips,own,uploads").maybeSingle();if(e2)throw e2;
     if(pending>0)return; // a local change started meanwhile; it wins
     lastPull=Date.now();setSync("ok","Synkad");
     if(!all.length&&!st){
@@ -288,7 +300,7 @@ async function pull(){
       render();return}
     S=blank();
     S.tx=all.map(t=>({...t,amount:Number(t.amount)}));
-    if(st){S.rules=st.rules||{};S.overrides=st.overrides||{};S.tags=st.tags||DEFAULT_TAGS.slice();S.flips=st.flips||{};S.own=st.own||[];S.uploads=st.uploads||[]}
+    if(st){S.rules=st.rules||{};S.overrides=st.overrides||{};S.splits=st.splits||{};S.tags=st.tags||DEFAULT_TAGS.slice();S.flips=st.flips||{};S.own=st.own||[];S.uploads=st.uploads||[]}
     if(!S.tags.includes("Sparande"))S.tags.splice(Math.max(0,S.tags.indexOf("Lön")),0,"Sparande");
     render();
   }catch(e){console.error(e);setSync("err","Kunde inte hämta: "+(e.message||"okänt fel"))}
@@ -314,7 +326,7 @@ async function boot(){
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
 if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
-const BUILD="20261024120313";
+const BUILD="20261024122211";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
@@ -452,7 +464,7 @@ function tagOwnTransfers(){for(const t of S.tx){const m=t.key.match(/^överföri
    Match those pairs (same amount, opposite sign, different account, within 3 days) and tag both as transfers. */
 function pairTransfers(){
   const byAmt={};let n=0;const day=d=>Date.parse(d)/864e5;
-  for(const t of S.tx){if(S.overrides[t.id])continue;const k=Math.round(Math.abs(t.amount)*100);(byAmt[k]=byAmt[k]||[]).push(t)}
+  for(const t of S.tx){if(S.overrides[t.id]||splitOf(t))continue;const k=Math.round(Math.abs(t.amount)*100);(byAmt[k]=byAmt[k]||[]).push(t)}
   for(const k in byAmt){const list=byAmt[k];if(list.length<2)continue;
     const used=new Set();
     for(const a of list){if(a.amount>=0||used.has(a))continue;
@@ -548,6 +560,14 @@ function showNotice(t){const n=document.getElementById("notice");n.textContent=t
 
 /* ---------- derived ---------- */
 function tagOf(t){return S.overrides[t.id]||S.rules[t.key]||""}
+// A split transaction counts as several parts: [[tag, percent], ...] adding up to 100, e.g. 40 % Alkohol and
+// 60 % Restaurang. A split wins over the place's rule and over a per-transaction tag.
+function splitOf(t){const s=S.splits&&S.splits[t.id];return Array.isArray(s)&&s.length>1?s:null}
+// The parts a transaction counts as: one per share of a split, or the whole amount under its tag.
+// The last share takes the rounding, so the parts always add up to the transaction.
+function partsOf(t){const a=sign(t),s=splitOf(t);if(!s)return[{tag:tagOf(t),amount:a,pct:100}];
+  let left=a;return s.map(([tag,pct],i)=>{const v=i===s.length-1?Math.round(left*100)/100:Math.round(a*pct)/100;left-=v;return{tag,amount:v,pct}})}
+function tagsOf(t){return partsOf(t).map(x=>x.tag)}
 function sign(t){return S.flips[t.src]?-t.amount:t.amount}
 function color(tag){const i=S.tags.indexOf(tag);return tag?PALETTE[(i<0?0:i)%PALETTE.length]:"var(--muted)"}
 const fmt=new Intl.NumberFormat("sv-SE",{maximumFractionDigits:0});
@@ -582,8 +602,9 @@ const INCOME_TAGS=new Set(["Lön"]);
 function isIncome(a,tag){return a>=0&&(!tag||INCOME_TAGS.has(tag))}
 function aggregate(months){
   const set=new Set(months);const per={};months.forEach(m=>per[m]={inc:0,out:0,byTag:{}});
-  for(const t of S.tx){const m=periodOf(t.date);if(!set.has(m))continue;const tag=tagOf(t);if(tag===TRANSFER)continue;
-    const a=sign(t);const p=per[m];if(isIncome(a,tag))p.inc+=a;else{const k=tag||"";p.byTag[k]=(p.byTag[k]||0)-a}}
+  for(const t of S.tx){const m=periodOf(t.date);if(!set.has(m))continue;const p=per[m];
+    for(const{tag,amount:a}of partsOf(t)){if(tag===TRANSFER)continue;
+      if(isIncome(a,tag))p.inc+=a;else{const k=tag||"";p.byTag[k]=(p.byTag[k]||0)-a}}}
   // A tag that got more back than was spent in a period (paid in one month, repaid in the next) has nothing
   // left to shrink; the surplus counts as income so the net stays right.
   for(const m of months){const p=per[m];
@@ -661,12 +682,14 @@ function renderOverview(){
 }
 // What one tag consists of in one month: places by total, each place opening to its purchases.
 function catDetail(month,tag){
-  const rows=S.tx.filter(t=>periodOf(t.date)===month&&(tagOf(t)||"")===tag&&!isIncome(sign(t),tagOf(t)));
-  const g={};for(const t of rows){const x=(g[t.key]=g[t.key]||{key:t.key,label:t.text,sum:0,items:[]});x.sum-=sign(t);x.items.push(t)}
+  // one entry per transaction part under this tag; a split purchase contributes only its share
+  const rows=[];for(const t of S.tx){if(periodOf(t.date)!==month)continue;
+    for(const x of partsOf(t))if((x.tag||"")===tag&&!isIncome(x.amount,x.tag))rows.push({t,v:x.amount,pct:x.pct})}
+  const g={};for(const r of rows){const t=r.t;const x=(g[t.key]=g[t.key]||{key:t.key,label:t.text,sum:0,items:[]});x.sum-=r.v;x.items.push(r)}
   const places=Object.values(g).sort((a,b)=>b.sum-a.sum);
   return `<div class="det">${places.map(p=>{const open=view.openPlace===p.key;
     return `<button class="pl" data-place="${esc(p.key)}" aria-expanded="${open}"><span class="pn">${esc(p.label)}</span><span class="num pc">${p.items.length} st</span><span class="num ps">${kr(p.sum)}</span></button>
-    ${open?`<div class="buys">${p.items.sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`<div class="buy"><span class="num">${t.date.slice(8)}/${+t.date.slice(5,7)}</span><span class="bt">${esc(t.text)}<small>${esc(t.src)}</small></span><span class="num"${sign(t)>0?' style="color:var(--in)"':""}>${kr(-sign(t))}</span></div>`).join("")}</div>`:""}`}).join("")}
+    ${open?`<div class="buys">${p.items.sort((a,b)=>b.t.date.localeCompare(a.t.date)).map(({t,v,pct})=>`<div class="buy"><span class="num">${t.date.slice(8)}/${+t.date.slice(5,7)}</span><span class="bt">${esc(t.text)}<small>${esc(t.src)}${pct<100?` · ${fmtPct(pct)} av ${kr(Math.abs(sign(t)))}`:""}</small></span><span class="num"${v>0?' style="color:var(--in)"':""}>${kr(-v)}</span></div>`).join("")}</div>`:""}`}).join("")}
     <button class="linkbtn retag" data-retag="${esc(tag)}">Visa i Transaktioner</button></div>`;
 }
 function chartSVG(months,per,tags){
@@ -710,7 +733,7 @@ document.getElementById("p-ov").addEventListener("click",e=>{
 // such as transfers matched between your own accounts.
 function groups(){const g={};
   for(const t of S.tx){const k=t.key;const x=(g[k]=g[k]||{key:k,label:t.text,n:0,sum:0,open:0,tags:new Set()});
-    x.n++;x.sum+=sign(t);const tg=tagOf(t);if(tg)x.tags.add(tg);else x.open++}
+    x.n++;x.sum+=sign(t);const s=splitOf(t);if(s){s.forEach(([tg])=>x.tags.add(tg));continue}const tg=tagOf(t);if(tg)x.tags.add(tg);else x.open++}
   return Object.values(g).map(x=>(x.tag=x.open===0&&x.tags.size===1?[...x.tags][0]:"",x)).sort((a,b)=>Math.abs(b.sum)-Math.abs(a.sum))}
 function untaggedGroups(){return groups().filter(g=>g.open>0)}
 function renderTag(){
@@ -755,16 +778,58 @@ function renderTx(){
 }
 function renderTxList(){
   const q=view.q.toLowerCase();
-  let rows=S.tx.filter(t=>(!q||t.text.toLowerCase().includes(q))&&(!view.tf||(view.tf==="__none"?!tagOf(t):tagOf(t)===view.tf)));
+  let rows=S.tx.filter(t=>(!q||t.text.toLowerCase().includes(q))&&(!view.tf||(view.tf==="__none"?!splitOf(t)&&!tagOf(t):tagsOf(t).includes(view.tf))));
   const total=rows.length;rows=rows.slice(0,300);
-  document.getElementById("txl").innerHTML=rows.map(t=>{const a=sign(t),tg=tagOf(t);
+  document.getElementById("txl").innerHTML=rows.map(t=>{const a=sign(t),sp=splitOf(t),tg=sp?"":tagOf(t);
     return`<div class="tx"><span class="d num">${t.date.slice(5)}</span><span class="t">${esc(t.text)} <span class="s">${t.src}</span></span><span class="a num ${a>=0?"in":""}">${a>=0?"+":"−"}${fmt.format(Math.abs(a))}</span>
-    <select data-id="${esc(t.id)}" aria-label="Tagg"><option value="">${tg?"":"Otaggat"}</option>${S.tags.map(x=>`<option ${x===tg?"selected":""}>${esc(x)}</option>`).join("")}</select></div>`}).join("")
+    <select data-id="${esc(t.id)}" aria-label="Tagg">${sp?`<option value="__split" selected>Delad</option>`:`<option value="">${tg?"":"Otaggat"}</option>`}${S.tags.map(x=>`<option ${x===tg?"selected":""}>${esc(x)}</option>`).join("")}<option value="__split">${sp?"Ändra delning…":"Dela…"}</option></select>
+    ${sp&&view.sd?.id!==t.id?`<span class="sp">${partsOf(t).map(x=>`${esc(x.tag)} ${fmtPct(x.pct)} <span class="num">${fmt.format(Math.abs(x.amount))}</span>`).join(" · ")}</span>`:""}
+    ${view.sd?.id===t.id?splitEditor(t):""}</div>`}).join("")
     +(total>300?`<div class="empty">Visar 300 av ${total}. Sök för att hitta fler.</div>`:"")||`<div class="empty">Inga transaktioner matchar.</div>`;
 }
 document.getElementById("p-tx").addEventListener("change",e=>{
-  const s=e.target.closest("select[data-id]");if(!s)return;
-  if(s.value)S.overrides[s.dataset.id]=s.value;else delete S.overrides[s.dataset.id];save();
+  const s=e.target.closest("select[data-id]");if(s){const id=s.dataset.id,t=S.tx.find(x=>x.id===id);
+    if(s.value==="__split"){openSplit(t);return}
+    // picking a single tag ends a split
+    delete S.splits[id];if(view.sd?.id===id)view.sd=null;
+    if(s.value)S.overrides[id]=s.value;else delete S.overrides[id];save();renderTxList();return}
+  const st=e.target.closest(".split select");if(st&&view.sd){view.sd.parts[+st.dataset.i][0]=st.value}
+});
+
+/* split editor: the last share is always "the rest", so the percentages can't fail to add up */
+function fmtPct(p){return (Math.round(p*10)/10).toLocaleString("sv-SE")+" %"}
+function openSplit(t){const s=splitOf(t);
+  view.sd={id:t.id,parts:s?s.map(x=>x.slice()):[["",40],[tagOf(t)||"",60]]};renderTxList();
+  const f=document.querySelector(".split input");if(f){f.focus();f.select()}}
+function restPct(){const ps=view.sd.parts;return 100-ps.slice(0,-1).reduce((a,x)=>a+(+x[1]||0),0)}
+function splitEditor(t){const a=Math.abs(sign(t)),ps=view.sd.parts,rest=restPct();
+  const opts=v=>`<option value="">Välj tagg</option>`+S.tags.filter(x=>x!==TRANSFER).map(x=>`<option ${x===v?"selected":""}>${esc(x)}</option>`).join("");
+  return `<div class="split" role="group" aria-label="Dela transaktionen">
+    ${ps.map(([tag,pct],i)=>{const last=i===ps.length-1;return`<div class="sr"><select data-i="${i}" aria-label="Tagg för del ${i+1}">${opts(tag)}</select>
+      ${last?`<span class="rest">resten · <b data-rest>${fmtPct(rest)}</b></span>`:`<label class="pc"><input type="number" inputmode="decimal" min="0.1" max="99.9" step="any" data-i="${i}" value="${pct}" aria-label="Procent för del ${i+1}"> %</label>`}
+      <span class="num sa" data-amt="${i}">${fmt.format(a*(last?rest:+pct||0)/100)}</span>
+      ${ps.length>2?`<button class="srm" data-rm="${i}" aria-label="Ta bort del ${i+1}">×</button>`:"<span></span>"}</div>`}).join("")}
+    <button class="linkbtn" data-sadd>+ Lägg till del</button>
+    <div class="sbtns"><button class="btn" data-ssave>Spara</button><button class="linkbtn" data-scancel>Avbryt</button>${splitOf(t)?`<button class="linkbtn" data-sdel>Ta bort delning</button>`:""}<span class="smsg" role="status"></span></div></div>`}
+document.getElementById("p-tx").addEventListener("input",e=>{
+  const f=e.target.closest(".split input[data-i]");if(!f||!view.sd)return;
+  view.sd.parts[+f.dataset.i][1]=f.value===""?"":+f.value;
+  const t=S.tx.find(x=>x.id===view.sd.id),a=Math.abs(sign(t)),ps=view.sd.parts,rest=restPct(),box=f.closest(".split");
+  box.querySelector("[data-rest]").textContent=fmtPct(rest);
+  ps.forEach(([,pct],i)=>{const el=box.querySelector(`[data-amt="${i}"]`);if(el)el.textContent=fmt.format(a*(i===ps.length-1?rest:+pct||0)/100)});
+});
+document.getElementById("p-tx").addEventListener("click",e=>{
+  if(!view.sd||!e.target.closest(".split"))return;const sd=view.sd,msg=e.target.closest(".split").querySelector(".smsg");
+  if(e.target.closest("[data-sadd]")){sd.parts.splice(sd.parts.length-1,0,["",Math.max(1,Math.min(20,Math.floor(restPct()/2)))]);renderTxList();return}
+  const rm=e.target.closest("[data-rm]");if(rm){sd.parts.splice(+rm.dataset.rm,1);renderTxList();return}
+  if(e.target.closest("[data-scancel]")){view.sd=null;renderTxList();return}
+  if(e.target.closest("[data-sdel]")){delete S.splits[sd.id];view.sd=null;save();renderTxList();return}
+  if(e.target.closest("[data-ssave]")){
+    const ps=sd.parts.map((x,i)=>[x[0],i===sd.parts.length-1?Math.round(restPct()*1000)/1000:+x[1]]);
+    if(ps.some(x=>!x[0])){msg.textContent="Välj en tagg för varje del.";return}
+    if(new Set(ps.map(x=>x[0])).size<ps.length){msg.textContent="Välj olika taggar.";return}
+    if(ps.some(x=>!(x[1]>0))){msg.textContent="Varje del behöver mer än 0 %.";return}
+    S.splits[sd.id]=ps;delete S.overrides[sd.id];view.sd=null;save();renderTxList()}
 });
 
 /* ---------- wiring ---------- */
