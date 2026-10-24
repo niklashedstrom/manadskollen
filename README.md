@@ -23,5 +23,5 @@ Personal income/expense overview from Nordea exports (account PDFs, card CSV). S
 - Transfers between your own accounts are matched (same amount, opposite sign, different account, ≤3 days apart) and tagged `Överföring`, which is excluded from totals. `Överföring <your own account number>` is always a transfer.
 - Card bill payments (`Betalning PG 4173300-7`) are tagged `Kortfaktura` and count as spending until the card's own purchases for that period are loaded; then the payment pairs with the card's `INBETALNING` and drops out.
 - Money in counts as income only when untagged or tagged `Lön` (`INCOME_TAGS`). Money in with any other tag is paid-back spending: a Swish back tagged `Restaurang` lowers that month's `Restaurang` total, and shows as a minus line under the tag. If a tag gets more back than was spent that month, the surplus counts as income.
-- The running month is labelled "pågår"; the overview opens on the last complete month.
+- The overview groups by month, quarter or year (Månad/Kvartal/År, remembered per browser). The running period is labelled "pågår" and the overview opens on the last complete one; a first quarter or year that starts before your oldest file is labelled "från <month>".
 - `./release.sh` before each commit stamps a build id; open Home Screen apps compare it with `/version.txt` and reload when it changes.
