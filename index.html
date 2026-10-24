@@ -181,14 +181,15 @@ details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
   </header>
 
   <section class="login" id="login" hidden>
-    <h2>Logga in</h2>
+    <h2 id="logintitle">Logga in</h2>
     <form id="loginform" class="stack">
       <input type="email" id="email" required autocomplete="username" placeholder="din@epost.se" aria-label="E-post">
       <input type="password" id="password" required autocomplete="current-password" placeholder="Lösenord" aria-label="Lösenord">
-      <button class="btn" type="submit">Logga in</button>
+      <button class="btn" type="submit" id="loginbtn">Logga in</button>
     </form>
     <p id="loginmsg" role="status"></p>
-    <p class="hint">Inget lösenord än, eller glömt det? <button class="linkbtn" id="sendlink">Skicka inloggningslänk</button>. Länken öppnas i din standardwebbläsare, och där kan du sätta ett lösenord längst ner på sidan.</p>
+    <p class="hint" id="signinhints">Ny här? <button class="linkbtn" id="tosignup">Skapa konto</button>.<br>Glömt lösenordet? <button class="linkbtn" id="sendlink">Skicka inloggningslänk</button>. Länken öppnas i din standardwebbläsare, och där kan du sätta ett nytt lösenord längst ner på sidan.</p>
+    <p class="hint" id="signuphints" hidden>Har du redan ett konto? <button class="linkbtn" id="tosignin">Logga in</button>.<br>Din data syns bara för dig.</p>
   </section>
   <div id="app" hidden>
 
@@ -310,18 +311,42 @@ async function boot(){
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
 if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
-const BUILD="20261016080545";
+const BUILD="20261024102531";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
 setTimeout(checkUpdate,3000);
+// one form, two modes: sign in (default) and create account
+let signupMode=false;
+function setSignup(on){signupMode=on;
+  document.getElementById("logintitle").textContent=on?"Skapa konto":"Logga in";
+  document.getElementById("loginbtn").textContent=on?"Skapa konto":"Logga in";
+  const pw=document.getElementById("password");
+  pw.autocomplete=on?"new-password":"current-password";pw.placeholder=on?"Lösenord, minst 8 tecken":"Lösenord";pw.minLength=on?8:0;
+  document.getElementById("signinhints").hidden=on;document.getElementById("signuphints").hidden=!on;
+  document.getElementById("loginmsg").textContent="";document.getElementById("email").focus()}
+document.getElementById("tosignup").addEventListener("click",()=>setSignup(true));
+document.getElementById("tosignin").addEventListener("click",()=>setSignup(false));
+async function signUp(email,password,msg){
+  if(password.length<8){msg.textContent="Lösenordet behöver minst 8 tecken.";return}
+  msg.textContent="Skapar konto…";
+  const{data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin}});
+  if(error){msg.textContent=/not allowed|disabled/i.test(error.message)?"Registrering är avstängd just nu.":/already/i.test(error.message)?"Det finns redan ett konto med den e-posten. Logga in i stället.":"Det gick inte: "+error.message;return}
+  try{localStorage.setItem("mk-email",email)}catch(_){}
+  // with email confirmation on, there is no session until the link is clicked;
+  // an existing address also comes back without a session and with no identities
+  if(data.session){msg.textContent="";return}
+  if(data.user&&data.user.identities&&data.user.identities.length===0){msg.textContent="Det finns redan ett konto med den e-posten. Logga in i stället.";setSignup(false);return}
+  msg.textContent="Nästan klart. Öppna länken vi skickade till "+email+" för att bekräfta kontot, sedan kan du logga in.";
+}
 document.getElementById("loginform").addEventListener("submit",async e=>{
   e.preventDefault();const msg=document.getElementById("loginmsg");
   if(!sb){msg.textContent="Databasen är inte konfigurerad.";return}
   const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;
+  if(signupMode)return signUp(email,password,msg);
   msg.textContent="Loggar in…";
   const{error}=await sb.auth.signInWithPassword({email,password});
-  if(error){msg.textContent=/invalid/i.test(error.message)?"Fel e-post eller lösenord. Har du inte satt ett lösenord än, använd länken nedan.":"Det gick inte: "+error.message;return}
+  if(error){msg.textContent=/not confirmed/i.test(error.message)?"Kontot är inte bekräftat än. Öppna länken i mejlet vi skickade.":/invalid/i.test(error.message)?"Fel e-post eller lösenord. Har du glömt lösenordet, använd länken nedan.":"Det gick inte: "+error.message;return}
   msg.textContent="";try{localStorage.setItem("mk-email",email)}catch(_){}
 });
 document.getElementById("sendlink").addEventListener("click",async()=>{
