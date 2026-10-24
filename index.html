@@ -219,7 +219,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
   </section>
 
   </div>
-  <p class="foot"><span id="who"></span> Datan sparas i din egen databas, och bara ditt konto kan läsa den. Taggen ”Överföring” räknas inte med, så betalningen av kortfakturan blir inte en dubbel utgift.</p>
+  <p class="foot"><span id="who"></span> Datan sparas i din egen databas, och bara ditt konto kan läsa den. Taggen ”Överföring” räknas inte med, så betalningen av kortfakturan blir inte en dubbel utgift. Pengar in med en utgiftstagg, t.ex. en Swish tillbaka taggad Restaurang, minskar den taggens utgifter i stället för att räknas som inkomst.</p>
 </div>
 
 <script>
@@ -311,7 +311,7 @@ async function boot(){
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
 if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
-const BUILD="20261024102531";
+const BUILD="20261024103911";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
@@ -560,10 +560,18 @@ function monthsInRange(){
   while(y<ey||(y===ey&&m<=em)){all.push(y+"-"+String(m).padStart(2,"0"));m++;if(m>12){m=1;y++}}
   return view.range?all.slice(-view.range):all;
 }
+// Money in counts as income only when it is untagged or carries an income tag. Money in with a spending tag
+// (a Swish back for a shared restaurant bill, a refund) is paid-back spending: it lowers that tag's total.
+const INCOME_TAGS=new Set(["Lön"]);
+function isIncome(a,tag){return a>=0&&(!tag||INCOME_TAGS.has(tag))}
 function aggregate(months){
   const set=new Set(months);const per={};months.forEach(m=>per[m]={inc:0,out:0,byTag:{}});
   for(const t of S.tx){const m=t.date.slice(0,7);if(!set.has(m))continue;const tag=tagOf(t);if(tag===TRANSFER)continue;
-    const a=sign(t);const p=per[m];if(a>=0)p.inc+=a;else{p.out+=-a;const k=tag||"";p.byTag[k]=(p.byTag[k]||0)-a}}
+    const a=sign(t);const p=per[m];if(isIncome(a,tag))p.inc+=a;else{const k=tag||"";p.byTag[k]=(p.byTag[k]||0)-a}}
+  // A tag that got more back than was spent that month (paid in one month, repaid in the next) has nothing
+  // left to shrink; the surplus counts as income so the net stays right.
+  for(const m of months){const p=per[m];
+    for(const k of Object.keys(p.byTag)){const v=p.byTag[k];if(v<=0.005){p.inc+=-v;delete p.byTag[k]}else p.out+=v}}
   return per;
 }
 
@@ -631,12 +639,12 @@ function renderOverview(){
 }
 // What one tag consists of in one month: places by total, each place opening to its purchases.
 function catDetail(month,tag){
-  const rows=S.tx.filter(t=>t.date.startsWith(month)&&sign(t)<0&&(tagOf(t)||"")===tag);
+  const rows=S.tx.filter(t=>t.date.startsWith(month)&&(tagOf(t)||"")===tag&&!isIncome(sign(t),tagOf(t)));
   const g={};for(const t of rows){const x=(g[t.key]=g[t.key]||{key:t.key,label:t.text,sum:0,items:[]});x.sum-=sign(t);x.items.push(t)}
   const places=Object.values(g).sort((a,b)=>b.sum-a.sum);
   return `<div class="det">${places.map(p=>{const open=view.openPlace===p.key;
     return `<button class="pl" data-place="${esc(p.key)}" aria-expanded="${open}"><span class="pn">${esc(p.label)}</span><span class="num pc">${p.items.length} st</span><span class="num ps">${kr(p.sum)}</span></button>
-    ${open?`<div class="buys">${p.items.sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`<div class="buy"><span class="num">${t.date.slice(8)}/${+t.date.slice(5,7)}</span><span class="bt">${esc(t.text)}<small>${esc(t.src)}</small></span><span class="num">${kr(-sign(t))}</span></div>`).join("")}</div>`:""}`}).join("")}
+    ${open?`<div class="buys">${p.items.sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`<div class="buy"><span class="num">${t.date.slice(8)}/${+t.date.slice(5,7)}</span><span class="bt">${esc(t.text)}<small>${esc(t.src)}</small></span><span class="num"${sign(t)>0?' style="color:var(--in)"':""}>${kr(-sign(t))}</span></div>`).join("")}</div>`:""}`}).join("")}
     <button class="linkbtn retag" data-retag="${esc(tag)}">Visa i Transaktioner</button></div>`;
 }
 function chartSVG(months,per,tags){
