@@ -161,6 +161,16 @@ button,select,input{font:inherit;color:inherit}
 .mnav button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:1.1rem;line-height:1}
 .mnav button:disabled{opacity:.35;cursor:default}
 .pill{font-size:.7rem;font-weight:600;background:var(--soft);color:var(--muted);border-radius:999px;padding:2px 7px;vertical-align:middle}
+.pay{padding:0;overflow:hidden}
+.payh{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:baseline;width:100%;background:none;border:0;padding:12px 14px;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.payh .t{font-weight:600}
+.payh .t .chev{display:inline-block;width:.8em;color:var(--muted);transition:transform .15s}
+.payh[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.payh .o{font-size:1.05rem;color:var(--out)}
+.payh .m{grid-column:1/-1;font-size:.82rem;color:var(--muted)}
+.payh .m b{color:var(--ink);font-weight:500}
+.payh .warn{color:var(--out)}
+.paybody{border-top:1px solid var(--line);padding:12px 14px 14px}
 .avg{margin:-6px 0 0;font-size:.85rem;color:var(--muted)}
 .avg b{color:var(--ink);font-weight:500}
 details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
@@ -253,6 +263,8 @@ let S=sampleState();
 let view={just:new Set(),tab:"ov",sd:null,gran:"m",ranges:{m:12,q:8,y:0},month:null,q:"",tf:"",showTagged:false};
 // the chosen grouping (month, quarter, year) is remembered per browser
 try{const g=localStorage.getItem("mk-gran");if(g&&"mqy".includes(g)&&g.length===1)view.gran=g}catch(_){}
+// the since-payday card stays open or closed as you left it
+try{view.payOpen=localStorage.getItem("mk-pay")==="1"}catch(_){}
 
 function blank(){return{uploads:[],own:[],tx:[],rules:{},overrides:{},splits:{},tags:DEFAULT_TAGS.slice(),flips:{},sample:false}}
 function load(){try{const r=localStorage.getItem(KEY);if(r){const s=JSON.parse(r);return Object.assign(blank(),s)}}catch(e){}return sampleState()}
@@ -332,7 +344,7 @@ async function boot(){
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
 if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
-const BUILD="20261027124820";
+const BUILD="20261120073312";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
@@ -606,16 +618,50 @@ function periodLabel(p){if(view.gran==="y")return p;if(view.gran==="q")return p.
 // (a Swish back for a shared restaurant bill, a refund) is paid-back spending: it lowers that tag's total.
 const INCOME_TAGS=new Set(["Lön"]);
 function isIncome(a,tag){return a>=0&&(!tag||INCOME_TAGS.has(tag))}
-function aggregate(months){
-  const set=new Set(months);const per={};months.forEach(m=>per[m]={inc:0,out:0,byTag:{}});
-  for(const t of S.tx){const m=periodOf(t.date);if(!set.has(m))continue;const p=per[m];
-    for(const{tag,amount:a}of partsOf(t)){if(tag===TRANSFER)continue;
-      if(isIncome(a,tag))p.inc+=a;else{const k=tag||"";p.byTag[k]=(p.byTag[k]||0)-a}}}
+// In, out and out per tag for a set of transactions.
+function tally(txs){const p={inc:0,out:0,byTag:{}};
+  for(const t of txs)for(const{tag,amount:a}of partsOf(t)){if(tag===TRANSFER)continue;
+    if(isIncome(a,tag))p.inc+=a;else{const k=tag||"";p.byTag[k]=(p.byTag[k]||0)-a}}
   // A tag that got more back than was spent in a period (paid in one month, repaid in the next) has nothing
   // left to shrink; the surplus counts as income so the net stays right.
-  for(const m of months){const p=per[m];
-    for(const k of Object.keys(p.byTag)){const v=p.byTag[k];if(v<=0.005){p.inc+=-v;delete p.byTag[k]}else p.out+=v}}
-  return per;
+  for(const k of Object.keys(p.byTag)){const v=p.byTag[k];if(v<=0.005){p.inc+=-v;delete p.byTag[k]}else p.out+=v}
+  return p;
+}
+function aggregate(months){
+  const set=new Set(months);const by={};months.forEach(m=>by[m]=[]);
+  for(const t of S.tx){const m=periodOf(t.date);if(set.has(m))by[m].push(t)}
+  const per={};for(const m of months)per[m]=tally(by[m]);return per;
+}
+
+/* Since payday: salary is paid on the 25th, or the last bank day before it when the 25th is a weekend or holiday.
+   A Lön-tagged deposit near that day wins, so an early salary counts from the day it actually arrived. */
+function isoDay(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function addDays(iso,n){const d=new Date(iso+"T12:00:00");d.setDate(d.getDate()+n);return isoDay(d)}
+function daysBetween(a,b){return Math.round((Date.parse(b)-Date.parse(a))/864e5)}
+function easter(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),
+  h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),n=h+l-7*m+114;
+  return isoDay(new Date(y,Math.floor(n/31)-1,n%31+1))}
+// Only days 19–25 matter here; the Swedish bank holidays that can land on them.
+function bankClosed(d){const w=d.getDay(),m=d.getMonth()+1,day=d.getDate();
+  if(w===0||w===6)return true;
+  if(m===12&&(day===24||day===25))return true;
+  if(m===6&&w===5&&day>=19&&day<=25)return true; // midsommarafton
+  const off=daysBetween(easter(d.getFullYear()),isoDay(d));return off===-2||off===1||off===39} // långfredag, annandag påsk, Kristi himmelsfärd
+function paydayOf(y,m){const d=new Date(y,m,25,12);while(bankClosed(d))d.setDate(d.getDate()-1);return isoDay(d)}
+function paydays(today){const d=new Date(today+"T12:00:00");let y=d.getFullYear(),m=d.getMonth();
+  let last=paydayOf(y,m),next;
+  if(last>today){next=last;last=paydayOf(m?y:y-1,m?m-1:11)}else next=paydayOf(m===11?y+1:y,(m+1)%12);
+  return{last,next}}
+function sincePay(){
+  const lastData=S.tx.reduce((a,t)=>t.date>a?t.date:a,"");
+  // example data is from the past; measure it against its own last day
+  const today=S.sample?lastData:isoDay(new Date());
+  const{last,next}=paydays(today);
+  const lo=addDays(last,-7);
+  const lon=S.tx.filter(t=>t.date>=lo&&t.date<=today&&partsOf(t).some(x=>x.tag==="Lön"&&x.amount>0)).map(t=>t.date).sort();
+  const from=lon.length?lon[lon.length-1]:last;
+  const P=tally(S.tx.filter(t=>t.date>=from&&t.date<=today));
+  return{from,today,next,lastData,P,inP:t=>t.date>=from&&t.date<=today};
 }
 
 /* ---------- render ---------- */
@@ -668,7 +714,7 @@ function renderOverview(){
   const first=allMonths()[0],partial=view.gran!=="m"&&monthsOf(sel)[0]<first;
   const unit={m:["månad","Föregående månad","Nästa månad"],q:["kvartal","Föregående kvartal","Nästa kvartal"],y:["år","Föregående år","Nästa år"]}[view.gran];
   const ranges={m:[[6,"6 mån"],[12,"12 mån"],[0,"Allt"]],q:[[4,"4 kv"],[8,"8 kv"],[0,"Allt"]],y:[]}[view.gran];
-  p.innerHTML=`
+  p.innerHTML=payCard()+`
     <div class="row">
       <div class="seg" role="group" aria-label="Visa per">${[["m","Månad"],["q","Kvartal"],["y","År"]].map(([v,l])=>`<button data-gran="${v}" aria-pressed="${view.gran===v}">${l}</button>`).join("")}</div>
       ${ranges.length?`<div class="seg" role="group" aria-label="Period i grafen">${ranges.map(([v,l])=>`<button data-range="${v}" aria-pressed="${view.ranges[view.gran]===v}">${l}</button>`).join("")}</div>`:""}</div>
@@ -683,18 +729,30 @@ function renderOverview(){
       <div class="legend" style="margin-top:10px"><span><i class="dot" style="background:var(--in)"></i>Inkomst</span>${allTags.map(t=>`<span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span>`).join("")}<span><i class="dot" style="background:var(--ink);border-radius:50%"></i>Netto</span></div>
       <p class="foot" style="margin:8px 0 0">Tryck på ${view.gran==="m"?"en månad":view.gran==="q"?"ett kvartal":"ett år"} i grafen för att visa ${view.gran==="y"?"det":view.gran==="q"?"det":"den"}.</p></div>
     <div class="card brk"><h2>Utgifter per tagg · ${name(sel)}</h2>
-      ${tagsUsed.length?tagsUsed.map(t=>{const open=view.openTag===t;return`<div class="cat${open?" open":""}"><button class="it" data-cat="${esc(t)}" aria-expanded="${open}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tagsUsed[0]]*100}%;background:${color(t)}"></i></span></button>${open?catDetail(sel,t):""}</div>`}).join(""):`<div class="empty">Inga utgifter ${view.gran==="m"?"den här månaden":view.gran==="q"?"det här kvartalet":"det här året"}.</div>`}
+      ${tagsUsed.length?tagsUsed.map(t=>{const open=view.openTag===t;return`<div class="cat${open?" open":""}"><button class="it" data-cat="${esc(t)}" aria-expanded="${open}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tagsUsed[0]]*100}%;background:${color(t)}"></i></span></button>${open?catDetail(x=>periodOf(x.date)===sel,t):""}</div>`}).join(""):`<div class="empty">Inga utgifter ${view.gran==="m"?"den här månaden":view.gran==="q"?"det här kvartalet":"det här året"}.</div>`}
     </div>`;
 }
+function payCard(){
+  const{from,today,next,lastData,P,inP}=sincePay();
+  const DOW=["sön","mån","tis","ons","tor","fre","lör"];
+  const dl=iso=>{const d=new Date(iso+"T12:00:00");return DOW[d.getDay()]+" "+d.getDate()+" "+MONTHS[d.getMonth()]};
+  const left=P.inc-P.out,toNext=daysBetween(today,next),open=view.payOpen;
+  const stale=lastData<today?(lastData<from?`<span class="warn">Ingen fil efter lönen än, senaste data ${dl(lastData)}</span>`:`data t.o.m. ${dl(lastData)}`):"";
+  const byTag=P.byTag,tags=Object.keys(byTag).sort((a,b)=>byTag[b]-byTag[a]);
+  return `<div class="card pay"><button class="payh" data-pay aria-expanded="${!!open}">
+      <span class="t"><span class="chev" aria-hidden="true">›</span> Sedan lönen · ${dl(from)}</span><span class="o num">${kr(P.out)}</span>
+      <span class="m">${P.inc>0?`kvar <b class="num">${left>=0?"":"−"}${kr(Math.abs(left))}</b> · `:""}${toNext>0?`${toNext} ${toNext===1?"dag":"dagar"} till nästa lön`:"lönedag"}${stale?" · "+stale:""}</span></button>
+    ${open?`<div class="paybody brk">${tags.length?tags.map(t=>{const o=view.payTag===t;return`<div class="cat${o?" open":""}"><button class="it" data-ptag="${esc(t)}" aria-expanded="${o}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tags[0]]*100}%;background:${color(t)}"></i></span></button>${o?catDetail(inP,t,view.payPlace,"pplace"):""}</div>`}).join(""):`<div class="empty">Inga utgifter sedan lönen.</div>`}</div>`:""}</div>`;
+}
 // What one tag consists of in one month: places by total, each place opening to its purchases.
-function catDetail(month,tag){
+function catDetail(inP,tag,openPlace=view.openPlace,attr="place"){
   // one entry per transaction part under this tag; a split purchase contributes only its share
-  const rows=[];for(const t of S.tx){if(periodOf(t.date)!==month)continue;
+  const rows=[];for(const t of S.tx){if(!inP(t))continue;
     for(const x of partsOf(t))if((x.tag||"")===tag&&!isIncome(x.amount,x.tag))rows.push({t,v:x.amount,pct:x.pct})}
   const g={};for(const r of rows){const t=r.t;const x=(g[t.key]=g[t.key]||{key:t.key,label:t.text,sum:0,items:[]});x.sum-=r.v;x.items.push(r)}
   const places=Object.values(g).sort((a,b)=>b.sum-a.sum);
-  return `<div class="det">${places.map(p=>{const open=view.openPlace===p.key;
-    return `<button class="pl" data-place="${esc(p.key)}" aria-expanded="${open}"><span class="pn">${esc(p.label)}</span><span class="num pc">${p.items.length} st</span><span class="num ps">${kr(p.sum)}</span></button>
+  return `<div class="det">${places.map(p=>{const open=openPlace===p.key;
+    return `<button class="pl" data-${attr}="${esc(p.key)}" aria-expanded="${open}"><span class="pn">${esc(p.label)}</span><span class="num pc">${p.items.length} st</span><span class="num ps">${kr(p.sum)}</span></button>
     ${open?`<div class="buys">${p.items.sort((a,b)=>b.t.date.localeCompare(a.t.date)).map(({t,v,pct})=>`<button class="buy" data-tx="${esc(t.id)}" aria-label="Öppna ${esc(t.text)} ${t.date} i Transaktioner"><span class="num">${t.date.slice(8)}/${+t.date.slice(5,7)}</span><span class="bt">${esc(t.text)}<small>${esc(t.src)}${pct<100?` · ${fmtPct(pct)} av ${kr(Math.abs(sign(t)))}`:""}</small></span><span class="num"${v>0?' style="color:var(--in)"':""}>${kr(-v)}</span><span class="go" aria-hidden="true">›</span></button>`).join("")}</div>`:""}`}).join("")}
     <button class="linkbtn retag" data-retag="${esc(tag)}">Visa i Transaktioner</button></div>`;
 }
@@ -722,6 +780,9 @@ function chartSVG(months,per,tags){
 function niceStep(v){const p=Math.pow(10,Math.floor(Math.log10(v||1)));for(const k of[1,2,2.5,5,10])if(k*p>=v)return k*p;return 10*p}
 
 document.getElementById("p-ov").addEventListener("click",e=>{
+  if(e.target.closest("[data-pay]")){view.payOpen=!view.payOpen;try{localStorage.setItem("mk-pay",view.payOpen?"1":"")}catch(_){}render();return}
+  const pt=e.target.closest("[data-ptag]");if(pt){const t=pt.dataset.ptag;view.payTag=view.payTag===t?null:t;view.payPlace=null;render();return}
+  const pp=e.target.closest("[data-pplace]");if(pp){const k=pp.dataset.pplace;view.payPlace=view.payPlace===k?null:k;render();return}
   const gr=e.target.closest("[data-gran]");if(gr){const g=gr.dataset.gran;if(g!==view.gran){
     // keep looking at the same time: the quarter or year that holds the period you were on
     const from=view.cur?(view.gran==="y"?view.cur+"-12-01":view.gran==="q"?view.cur.slice(0,4)+"-"+String(+view.cur.slice(6)*3).padStart(2,"0")+"-01":view.cur+"-01"):null;
