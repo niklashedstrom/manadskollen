@@ -177,6 +177,12 @@ button,select,input{font:inherit;color:inherit}
 .payh .m b{color:var(--ink);font-weight:500}
 .payh .warn{color:var(--out)}
 .paybody{border-top:1px solid var(--line);padding:12px 14px 14px}
+.paynav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.paynav span{font-size:.85rem;color:var(--muted)}
+.paynav button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:1.1rem;line-height:1}
+.paynav button:disabled{opacity:.35;cursor:default}
+.paycmp{margin:0 0 8px;font-size:.85rem;color:var(--muted)}
+.paycmp b{color:var(--ink);font-weight:500}
 .avg{margin:-6px 0 0;font-size:.85rem;color:var(--muted)}
 .avg b{color:var(--ink);font-weight:500}
 details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
@@ -350,7 +356,7 @@ async function boot(){
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
 if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
-const BUILD="20261120073843";
+const BUILD="20261120075529";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
@@ -658,16 +664,25 @@ function paydays(today){const d=new Date(today+"T12:00:00");let y=d.getFullYear(
   let last=paydayOf(y,m),next;
   if(last>today){next=last;last=paydayOf(m?y:y-1,m?m-1:11)}else next=paydayOf(m===11?y+1:y,(m+1)%12);
   return{last,next}}
-function sincePay(){
-  const lastData=S.tx.reduce((a,t)=>t.date>a?t.date:a,"");
+// A pay period runs from one payday to the day before the next; back=0 is the running one, up to today.
+function payPeriod(back=0){
+  const lastData=S.tx.reduce((a,t)=>t.date>a?t.date:a,""),firstData=S.tx.reduce((a,t)=>!a||t.date<a?t.date:a,"");
   // example data is from the past; measure it against its own last day
   const today=S.sample?lastData:isoDay(new Date());
   const{last,next}=paydays(today);
-  const lo=addDays(last,-7);
-  const lon=S.tx.filter(t=>t.date>=lo&&t.date<=today&&partsOf(t).some(x=>x.tag==="Lön"&&x.amount>0)).map(t=>t.date).sort();
-  const from=lon.length?lon[lon.length-1]:last;
-  const P=tally(S.tx.filter(t=>t.date>=from&&t.date<=today));
-  return{from,today,next,lastData,P,inP:t=>t.date>=from&&t.date<=today};
+  const lon=S.tx.filter(t=>partsOf(t).some(x=>x.tag==="Lön"&&x.amount>0)).map(t=>t.date).sort();
+  const ly=+last.slice(0,4),lm=+last.slice(5,7)-1;
+  const rule=k=>{const m=lm-k;return paydayOf(ly+Math.floor(m/12),((m%12)+12)%12)};
+  // the day salary actually arrived: the latest Lön deposit from a week before the rule day to a few days after
+  const start=k=>{const R=rule(k),hi=addDays(R,3),lo=addDays(R,-7),cap=hi<today?hi:today;
+    const hit=lon.filter(d=>d>=lo&&d<=cap);return hit.length?hit[hit.length-1]:R};
+  const from=start(back),to=back?addDays(start(back-1),-1):today;
+  const inP=t=>t.date>=from&&t.date<=to;
+  const P=tally(S.tx.filter(inP));
+  // the period before, cut at the same number of days in, to compare the running one against
+  let same=null;
+  if(!back){const pf=start(1),pt=addDays(pf,daysBetween(from,to));same=tally(S.tx.filter(t=>t.date>=pf&&t.date<=pt&&t.date<from)).out}
+  return{from,to,today,next,lastData,P,inP,same,canBack:!!firstData&&addDays(from,-1)>=firstData};
 }
 
 /* ---------- render ---------- */
@@ -739,16 +754,28 @@ function renderOverview(){
     </div>`;
 }
 function payCard(){
-  const{from,today,next,lastData,P,inP}=sincePay();
+  const back=view.payBack||0,{from,to,today,next,lastData,P,inP,same,canBack}=payPeriod(back);
   const DOW=["sön","mån","tis","ons","tor","fre","lör"];
-  const dl=iso=>{const d=new Date(iso+"T12:00:00");return DOW[d.getDay()]+" "+d.getDate()+" "+MONTHS[d.getMonth()]};
-  const left=P.inc-P.out,toNext=daysBetween(today,next),open=view.payOpen;
-  const stale=lastData<today?(lastData<from?`<span class="warn">Ingen fil efter lönen än, senaste data ${dl(lastData)}</span>`:`data t.o.m. ${dl(lastData)}`):"";
+  const yr=iso=>iso.slice(0,4)!==today.slice(0,4)?" "+iso.slice(0,4):"";
+  const dl=iso=>{const d=new Date(iso+"T12:00:00");return DOW[d.getDay()]+" "+d.getDate()+" "+MONTHS[d.getMonth()]+yr(iso)};
+  const MF=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
+  const pname=MF[+from.slice(5,7)-1].replace(/^./,c=>c.toUpperCase())+"lönen"+yr(from);
+  const left=P.inc-P.out,toNext=daysBetween(today,next),open=view.payOpen,days=daysBetween(from,to)+1;
+  const leftTxt=P.inc>0?`${back?"över":"kvar"} <b class="num">${left>=0?"":"−"}${kr(Math.abs(left))}</b>`:"";
+  let meta;
+  if(back)meta=[leftTxt,`${days} dagar`];
+  else{const stale=lastData<today?(lastData<from?`<span class="warn">Ingen fil efter lönen än, senaste data ${dl(lastData)}</span>`:`data t.o.m. ${dl(lastData)}`):"";
+    meta=[leftTxt,toNext>0?`${toNext} ${toNext===1?"dag":"dagar"} till nästa lön`:"lönedag",stale]}
+  const title=back?`Lönen ${dl(from).replace(yr(to)&&yr(from)===yr(to)?yr(from):"","")} – ${dl(to)}`:`Sedan lönen · ${dl(from)}`;
   const byTag=P.byTag,tags=Object.keys(byTag).sort((a,b)=>byTag[b]-byTag[a]);
+  const diff=same!=null&&same>0?P.out-same:null;
   return `<div class="card pay"><button class="payh" data-pay aria-expanded="${!!open}">
-      <span class="t"><span class="chev" aria-hidden="true">›</span> Sedan lönen · ${dl(from)}</span><span class="o num">${kr(P.out)}</span>
-      <span class="m">${P.inc>0?`kvar <b class="num">${left>=0?"":"−"}${kr(Math.abs(left))}</b> · `:""}${toNext>0?`${toNext} ${toNext===1?"dag":"dagar"} till nästa lön`:"lönedag"}${stale?" · "+stale:""}</span></button>
-    ${open?`<div class="paybody brk">${tags.length?tags.map(t=>{const o=view.payTag===t;return`<div class="cat${o?" open":""}"><button class="it" data-ptag="${esc(t)}" aria-expanded="${o}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tags[0]]*100}%;background:${color(t)}"></i></span></button>${o?catDetail(inP,t,view.payPlace,"pplace"):""}</div>`}).join(""):`<div class="empty">Inga utgifter sedan lönen.</div>`}</div>`:""}</div>`;
+      <span class="t"><span class="chev" aria-hidden="true">›</span> ${title}</span><span class="o num">${kr(P.out)}</span>
+      <span class="m">${meta.filter(Boolean).join(" · ")}</span></button>
+    ${open?`<div class="paybody brk">
+      <div class="paynav"><button data-pstep="1" aria-label="Föregående löneperiod" ${canBack?"":"disabled"}>‹</button><span>${pname}${back?"":" · pågår"}</span><button data-pstep="-1" aria-label="Nästa löneperiod" ${back?"":"disabled"}>›</button></div>
+      ${diff!=null?`<p class="paycmp">Förra perioden efter ${days} ${days===1?"dag":"dagar"}: <b class="num">${kr(same)}</b> · du ligger <b class="num">${kr(Math.abs(diff))}</b> ${diff>0?"över":"under"}</p>`:""}
+      ${tags.length?tags.map(t=>{const o=view.payTag===t;return`<div class="cat${o?" open":""}"><button class="it" data-ptag="${esc(t)}" aria-expanded="${o}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tags[0]]*100}%;background:${color(t)}"></i></span></button>${o?catDetail(inP,t,view.payPlace,"pplace"):""}</div>`}).join(""):`<div class="empty">Inga utgifter ${back?"den perioden":"sedan lönen"}.</div>`}</div>`:""}</div>`;
 }
 // What one tag consists of in one month: places by total, each place opening to its purchases.
 function catDetail(inP,tag,openPlace=view.openPlace,attr="place"){
@@ -786,7 +813,9 @@ function chartSVG(months,per,tags){
 function niceStep(v){const p=Math.pow(10,Math.floor(Math.log10(v||1)));for(const k of[1,2,2.5,5,10])if(k*p>=v)return k*p;return 10*p}
 
 document.getElementById("p-ov").addEventListener("click",e=>{
-  if(e.target.closest("[data-pay]")){view.payOpen=!view.payOpen;try{localStorage.setItem("mk-pay",view.payOpen?"1":"")}catch(_){}render();return}
+  // closing the card goes back to the running period
+  if(e.target.closest("[data-pay]")){view.payOpen=!view.payOpen;if(!view.payOpen)view.payBack=0;try{localStorage.setItem("mk-pay",view.payOpen?"1":"")}catch(_){}render();return}
+  const ps=e.target.closest("[data-pstep]");if(ps){view.payBack=Math.max(0,(view.payBack||0)+ +ps.dataset.pstep);view.payTag=null;view.payPlace=null;render();return}
   const pt=e.target.closest("[data-ptag]");if(pt){const t=pt.dataset.ptag;view.payTag=view.payTag===t?null:t;view.payPlace=null;render();return}
   const pp=e.target.closest("[data-pplace]");if(pp){const k=pp.dataset.pplace;view.payPlace=view.payPlace===k?null:k;render();return}
   const gr=e.target.closest("[data-gran]");if(gr){const g=gr.dataset.gran;if(g!==view.gran){
