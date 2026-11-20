@@ -130,8 +130,14 @@ button,select,input{font:inherit;color:inherit}
 .tx .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tx .a{text-align:right}
 .tx .a.in{color:var(--in)}
-.tx > select{grid-column:2/4;justify-self:start;border:0;background:var(--soft);border-radius:6px;padding:2px 6px;font-size:.8rem;max-width:100%}
+.tx > select{grid-column:2;justify-self:start;border:0;background:var(--soft);border-radius:6px;padding:2px 6px;font-size:.8rem;max-width:100%}
 .tx .s{font-size:.72rem;color:var(--muted)}
+.tx .nb{grid-column:3;justify-self:end;background:none;border:0;padding:2px 0;color:var(--muted);font-size:.8rem;cursor:pointer}
+.tx .nt{grid-column:2/4;font-size:.85rem;overflow-wrap:anywhere;background:none;border:0;padding:0;text-align:left;color:inherit;font:inherit;font-size:.85rem;cursor:pointer}
+.tx .nt::before{content:"✎ ";color:var(--muted)}
+.tx .ne{grid-column:1/4;display:flex;gap:8px;margin-top:6px}
+.tx .ne input{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px;font-size:16px}
+.bt i{font-style:normal}
 .tx.focus{box-shadow:inset 3px 0 0 var(--ink);background:color-mix(in srgb,var(--in) 9%,var(--surface))}
 .txback{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;font-size:.85rem;color:var(--muted);margin:0 0 10px}
 .txback[hidden]{display:none}
@@ -266,7 +272,7 @@ try{const g=localStorage.getItem("mk-gran");if(g&&"mqy".includes(g)&&g.length===
 // the since-payday card stays open or closed as you left it
 try{view.payOpen=localStorage.getItem("mk-pay")==="1"}catch(_){}
 
-function blank(){return{uploads:[],own:[],tx:[],rules:{},overrides:{},splits:{},tags:DEFAULT_TAGS.slice(),flips:{},sample:false}}
+function blank(){return{uploads:[],own:[],tx:[],rules:{},overrides:{},splits:{},notes:{},tags:DEFAULT_TAGS.slice(),flips:{},sample:false}}
 function load(){try{const r=localStorage.getItem(KEY);if(r){const s=JSON.parse(r);return Object.assign(blank(),s)}}catch(e){}return sampleState()}
 function saveLocal(){try{if(!S.sample)localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 
@@ -293,7 +299,7 @@ function persistMonths(ms){if(!sb){saveLocal();return}
 function save(){if(!sb){saveLocal();return}if(S.sample)return;
   if(!metaTimer)pending++; // a waiting settings write blocks pulls
   clearTimeout(metaTimer);
-  metaTimer=setTimeout(()=>{metaTimer=null;pending--;const body={rules:S.rules,overrides:S.overrides,splits:S.splits,tags:S.tags,flips:S.flips,own:S.own,uploads:S.uploads,updated_at:new Date().toISOString()};
+  metaTimer=setTimeout(()=>{metaTimer=null;pending--;const body={rules:S.rules,overrides:S.overrides,splits:S.splits,notes:S.notes,tags:S.tags,flips:S.flips,own:S.own,uploads:S.uploads,updated_at:new Date().toISOString()};
     enqueue(async()=>{const{error}=await sb.from("mk_settings").upsert(body,{onConflict:"user_id"});if(error)throw error})},500)}
 function wipe(){S=blank();
   if(!sb){try{localStorage.removeItem(KEY)}catch(_){}return}
@@ -308,7 +314,7 @@ async function pull(){
     for(let from=0;;from+=1000){
       const{data,error}=await sb.from("mk_transactions").select("id,src,date,amount,text,key").order("date",{ascending:false}).order("id").range(from,from+999);
       if(error)throw error;all.push(...data);if(data.length<1000)break}
-    const{data:st,error:e2}=await sb.from("mk_settings").select("rules,overrides,splits,tags,flips,own,uploads").maybeSingle();if(e2)throw e2;
+    const{data:st,error:e2}=await sb.from("mk_settings").select("rules,overrides,splits,notes,tags,flips,own,uploads").maybeSingle();if(e2)throw e2;
     if(pending>0)return; // a local change started meanwhile; it wins
     lastPull=Date.now();setSync("ok","Synkad");
     if(!all.length&&!st){
@@ -318,7 +324,7 @@ async function pull(){
       render();return}
     S=blank();
     S.tx=all.map(t=>({...t,amount:Number(t.amount)}));
-    if(st){S.rules=st.rules||{};S.overrides=st.overrides||{};S.splits=st.splits||{};S.tags=st.tags||DEFAULT_TAGS.slice();S.flips=st.flips||{};S.own=st.own||[];S.uploads=st.uploads||[]}
+    if(st){S.rules=st.rules||{};S.overrides=st.overrides||{};S.splits=st.splits||{};S.notes=st.notes||{};S.tags=st.tags||DEFAULT_TAGS.slice();S.flips=st.flips||{};S.own=st.own||[];S.uploads=st.uploads||[]}
     if(!S.tags.includes("Sparande"))S.tags.splice(Math.max(0,S.tags.indexOf("Lön")),0,"Sparande");
     render();
   }catch(e){console.error(e);setSync("err","Kunde inte hämta: "+(e.message||"okänt fel"))}
@@ -344,7 +350,7 @@ async function boot(){
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
 if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
-const BUILD="20261120073312";
+const BUILD="20261120073843";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
@@ -753,7 +759,7 @@ function catDetail(inP,tag,openPlace=view.openPlace,attr="place"){
   const places=Object.values(g).sort((a,b)=>b.sum-a.sum);
   return `<div class="det">${places.map(p=>{const open=openPlace===p.key;
     return `<button class="pl" data-${attr}="${esc(p.key)}" aria-expanded="${open}"><span class="pn">${esc(p.label)}</span><span class="num pc">${p.items.length} st</span><span class="num ps">${kr(p.sum)}</span></button>
-    ${open?`<div class="buys">${p.items.sort((a,b)=>b.t.date.localeCompare(a.t.date)).map(({t,v,pct})=>`<button class="buy" data-tx="${esc(t.id)}" aria-label="Öppna ${esc(t.text)} ${t.date} i Transaktioner"><span class="num">${t.date.slice(8)}/${+t.date.slice(5,7)}</span><span class="bt">${esc(t.text)}<small>${esc(t.src)}${pct<100?` · ${fmtPct(pct)} av ${kr(Math.abs(sign(t)))}`:""}</small></span><span class="num"${v>0?' style="color:var(--in)"':""}>${kr(-v)}</span><span class="go" aria-hidden="true">›</span></button>`).join("")}</div>`:""}`}).join("")}
+    ${open?`<div class="buys">${p.items.sort((a,b)=>b.t.date.localeCompare(a.t.date)).map(({t,v,pct})=>`<button class="buy" data-tx="${esc(t.id)}" aria-label="Öppna ${esc(t.text)} ${t.date} i Transaktioner"><span class="num">${t.date.slice(8)}/${+t.date.slice(5,7)}</span><span class="bt">${esc(t.text)}<small>${S.notes[t.id]?`<i>✎ ${esc(S.notes[t.id])}</i> · `:""}${esc(t.src)}${pct<100?` · ${fmtPct(pct)} av ${kr(Math.abs(sign(t)))}`:""}</small></span><span class="num"${v>0?' style="color:var(--in)"':""}>${kr(-v)}</span><span class="go" aria-hidden="true">›</span></button>`).join("")}</div>`:""}`}).join("")}
     <button class="linkbtn retag" data-retag="${esc(tag)}">Visa i Transaktioner</button></div>`;
 }
 function chartSVG(months,per,tags){
@@ -846,7 +852,7 @@ function renderTx(){
 }
 function renderTxList(){
   const q=view.q.toLowerCase();
-  let rows=S.tx.filter(t=>(!q||t.text.toLowerCase().includes(q))&&(!view.tf||(view.tf==="__none"?!splitOf(t)&&!tagOf(t):tagsOf(t).includes(view.tf))));
+  let rows=S.tx.filter(t=>(!q||t.text.toLowerCase().includes(q)||(S.notes[t.id]||"").toLowerCase().includes(q))&&(!view.tf||(view.tf==="__none"?!splitOf(t)&&!tagOf(t):tagsOf(t).includes(view.tf))));
   const total=rows.length;rows=rows.slice(0,300);
   const ft=view.focus&&S.tx.find(t=>t.id===view.focus);if(ft&&!rows.includes(ft))rows.unshift(ft);
   document.getElementById("txback").hidden=!ft;
@@ -854,6 +860,8 @@ function renderTxList(){
     return`<div class="tx${view.focus===t.id?" focus":""}" data-tid="${esc(t.id)}"><span class="d num">${t.date.slice(5)}</span><span class="t">${esc(t.text)} <span class="s">${t.src}</span></span><span class="a num ${a>=0?"in":""}">${a>=0?"+":"−"}${fmt.format(Math.abs(a))}</span>
     <select data-id="${esc(t.id)}" aria-label="Tagg">${sp?`<option value="__split" selected>Delad</option>`:`<option value="">${tg?"":"Otaggat"}</option>`}${S.tags.map(x=>`<option ${x===tg?"selected":""}>${esc(x)}</option>`).join("")}<option value="__split">${sp?"Ändra delning…":"Dela…"}</option></select>
     ${sp&&view.sd?.id!==t.id?`<span class="sp">${partsOf(t).map(x=>`${esc(x.tag)} ${fmtPct(x.pct)} <span class="num">${fmt.format(Math.abs(x.amount))}</span>`).join(" · ")}</span>`:""}
+    ${view.ne===t.id?"":S.notes[t.id]?`<button class="nt" data-note="${esc(t.id)}" aria-label="Ändra anteckning">${esc(S.notes[t.id])}</button>`:`<button class="nb" data-note="${esc(t.id)}">+ Anteckning</button>`}
+    ${view.ne===t.id?`<form class="ne" data-nform="${esc(t.id)}"><input name="n" maxlength="200" value="${esc(S.notes[t.id]||"")}" placeholder="t.ex. byxor John Henrik" aria-label="Anteckning" enterkeyhint="done"><button class="btn" type="submit">Spara</button></form>`:""}
     ${view.sd?.id===t.id?splitEditor(t):""}</div>`}).join("")
     +(total>300?`<div class="empty">Visar 300 av ${total}. Sök för att hitta fler.</div>`:"")||`<div class="empty">Inga transaktioner matchar.</div>`;
 }
@@ -869,8 +877,17 @@ document.getElementById("p-tx").addEventListener("change",e=>{
 // From an overview purchase to its row here: search on the same text so the place's other purchases show too,
 // mark the row and scroll to it. "Tillbaka" returns to the overview as it was left.
 function openTx(id){const t=S.tx.find(x=>x.id===id);if(!t)return;
-  view.tab="tx";view.tf="";view.q=t.text;view.focus=id;view.sd=null;render();
+  view.tab="tx";view.tf="";view.q=t.text;view.focus=id;view.sd=null;view.ne=null;render();
   requestAnimationFrame(()=>{const el=document.querySelector(`.tx[data-tid="${CSS.escape(id)}"]`);if(el){el.scrollIntoView({block:"center"});const s=el.querySelector(":scope > select");if(s)s.focus({preventScroll:true})}})}
+// Notes: free text on one transaction, for receipts that don't say what was bought.
+function saveNote(id,v){v=v.trim();if((S.notes[id]||"")!==v){if(v)S.notes[id]=v;else delete S.notes[id];save()}view.ne=null;renderTxList()}
+document.getElementById("p-tx").addEventListener("click",e=>{const b=e.target.closest("[data-note]");if(!b)return;
+  view.ne=b.dataset.note;renderTxList();const i=document.querySelector(".ne input");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}});
+document.getElementById("p-tx").addEventListener("submit",e=>{const f=e.target.closest("[data-nform]");if(!f)return;e.preventDefault();saveNote(f.dataset.nform,f.n.value)});
+document.getElementById("p-tx").addEventListener("keydown",e=>{if(e.key==="Escape"&&e.target.closest(".ne")){view.ne=null;renderTxList()}});
+// leaving the field saves too, unless focus moved to its own Spara button
+document.getElementById("p-tx").addEventListener("focusout",e=>{const f=e.target.closest("[data-nform]");if(!f||e.target.name!=="n")return;
+  if(e.relatedTarget&&f.contains(e.relatedTarget))return;setTimeout(()=>{if(view.ne===f.dataset.nform)saveNote(f.dataset.nform,f.n.value)},0)});
 document.getElementById("p-tx").addEventListener("click",e=>{if(e.target.closest("[data-back]")){view.focus=null;view.tab="ov";render();window.scrollTo(0,0)}});
 /* split editor: the last share is always "the rest", so the percentages can't fail to add up */
 function fmtPct(p){return (Math.round(p*10)/10).toLocaleString("sv-SE")+" %"}
