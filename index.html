@@ -73,6 +73,7 @@ button,select,input{font:inherit;color:inherit}
 .kpi .l{font-size:.75rem;color:var(--muted)}
 /* shrinks with the tile so year totals (six digits) fit on a phone */
 .kpi .v{font-size:clamp(.75rem,13.5cqi,1.15rem);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cat.save{border-top:1px dashed var(--line);margin-top:6px;padding-top:6px}
 .kpi .v.in{color:var(--in)} .kpi .v.out{color:var(--out)}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -358,7 +359,7 @@ async function boot(){
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
 if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
-const BUILD="20261126114152";
+const BUILD="20261126114501";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
@@ -763,8 +764,11 @@ function renderOverview(){
       <p class="foot" style="margin:8px 0 0">Tryck på ${view.gran==="m"?"en månad":view.gran==="q"?"ett kvartal":"ett år"} i grafen för att visa ${view.gran==="y"?"det":view.gran==="q"?"det":"den"}.</p></div>
     <div class="card brk"><h2>Utgifter per tagg · ${name(sel)}</h2>
       ${tagsUsed.length?tagsUsed.map(t=>{const open=view.openTag===t;return`<div class="cat${open?" open":""}"><button class="it" data-cat="${esc(t)}" aria-expanded="${open}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tagsUsed[0]]*100}%;background:${color(t)}"></i></span></button>${open?catDetail(x=>periodOf(x.date)===sel,t):""}</div>`}).join(""):`<div class="empty">Inga utgifter ${view.gran==="m"?"den här månaden":view.gran==="q"?"det här kvartalet":"det här året"}.</div>`}
+      ${P.save>0?saveRow(P.save,view.openTag===SAVINGS,"cat",()=>catDetail(x=>periodOf(x.date)===sel,SAVINGS)):""}
     </div>`;
 }
+// Savings sit apart from spending in the breakdowns: their own row below the tags, opening to what was put aside where.
+function saveRow(v,open,attr,detail){return`<div class="cat save${open?" open":""}"><button class="it" data-${attr}="${esc(SAVINGS)}" aria-expanded="${open}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(SAVINGS)}"></i>Sparat</span><span class="am num">${kr(v)}<small>ej utgift</small></span><span class="bar"><i style="width:100%;background:${color(SAVINGS)};opacity:.55"></i></span></button>${open?detail():""}</div>`}
 function payCard(){
   const back=view.payBack||0,{from,to,today,next,lastData,P,inP,same,canBack}=payPeriod(back);
   const DOW=["sön","mån","tis","ons","tor","fre","lör"];
@@ -788,7 +792,8 @@ function payCard(){
     ${open?`<div class="paybody brk">
       <div class="paynav"><button data-pstep="1" aria-label="Föregående löneperiod" ${canBack?"":"disabled"}>‹</button><span>${pname}${back?"":" · pågår"}</span><button data-pstep="-1" aria-label="Nästa löneperiod" ${back?"":"disabled"}>›</button></div>
       ${diff!=null?`<p class="paycmp">Förra perioden efter ${days} ${days===1?"dag":"dagar"}: <b class="num">${kr(same)}</b> · du ligger <b class="num">${kr(Math.abs(diff))}</b> ${diff>0?"över":"under"}</p>`:""}
-      ${tags.length?tags.map(t=>{const o=view.payTag===t;return`<div class="cat${o?" open":""}"><button class="it" data-ptag="${esc(t)}" aria-expanded="${o}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tags[0]]*100}%;background:${color(t)}"></i></span></button>${o?catDetail(inP,t,view.payPlace,"pplace"):""}</div>`}).join(""):`<div class="empty">Inga utgifter ${back?"den perioden":"sedan lönen"}.</div>`}</div>`:""}</div>`;
+      ${tags.length?tags.map(t=>{const o=view.payTag===t;return`<div class="cat${o?" open":""}"><button class="it" data-ptag="${esc(t)}" aria-expanded="${o}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tags[0]]*100}%;background:${color(t)}"></i></span></button>${o?catDetail(inP,t,view.payPlace,"pplace"):""}</div>`}).join(""):`<div class="empty">Inga utgifter ${back?"den perioden":"sedan lönen"}.</div>`}
+      ${P.save>0?saveRow(P.save,view.payTag===SAVINGS,"ptag",()=>catDetail(inP,SAVINGS,view.payPlace,"pplace")):""}</div>`:""}</div>`;
 }
 // What one tag consists of in one month: places by total, each place opening to its purchases.
 function catDetail(inP,tag,openPlace=view.openPlace,attr="place"){
