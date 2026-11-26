@@ -68,7 +68,7 @@ button,select,input{font:inherit;color:inherit}
 .tab[aria-selected="true"]{color:var(--ink);border-color:var(--accent)}
 .tab .badge{font-family:var(--f-num);font-size:.72rem;background:var(--out);color:var(--surface);border-radius:999px;padding:1px 6px;margin-left:4px}
 .panel{display:flex;flex-direction:column;gap:16px}
-.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.kpis{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .kpi{background:var(--surface);padding:12px 14px;min-width:0;container-type:inline-size}
 .kpi .l{font-size:.75rem;color:var(--muted)}
 /* shrinks with the tile so year totals (six digits) fit on a phone */
@@ -260,13 +260,15 @@ details summary{cursor:pointer;color:var(--muted);font-size:.9rem}
   </section>
 
   </div>
-  <p class="foot"><span id="who"></span> Datan sparas i din egen databas, och bara ditt konto kan läsa den. Taggen ”Överföring” räknas inte med, så betalningen av kortfakturan blir inte en dubbel utgift. Pengar in med en utgiftstagg, t.ex. en Swish tillbaka taggad Restaurang, minskar den taggens utgifter i stället för att räknas som inkomst.</p>
+  <p class="foot"><span id="who"></span> Datan sparas i din egen databas, och bara ditt konto kan läsa den. Taggen ”Överföring” räknas inte med, så betalningen av kortfakturan blir inte en dubbel utgift. Taggen ”Sparande” räknas som sparat, inte som utgift: tagga t.ex. ”Överföring &lt;ISK-kontots nummer&gt;” som Sparande så kommer alla framtida överföringar dit med. Pengar in med en utgiftstagg, t.ex. en Swish tillbaka taggad Restaurang, minskar den taggens utgifter i stället för att räknas som inkomst.</p>
 </div>
 
 <script>
 (function(){
 const KEY="manadskollen-v1";
 const TRANSFER="Överföring";
+// Money put aside is neither spending nor gone: it is counted on its own, outside Ut.
+const SAVINGS="Sparande";
 const PALETTE=["#1f5f8b","#c4553a","#d49a2a","#6b4fa0","#2e8f8a","#b04a7a","#5f7d2f","#8a6a4a","#3f6fd1","#9a9a2a","#7a8a99"];
 const DEFAULT_TAGS=["Mat","Restaurang","Alkohol","Hem","Transport","Nöje","Shopping","Hälsa","Prenumerationer","Sparande","Lön",TRANSFER,"Övrigt"];
 const MONTHS=["jan","feb","mar","apr","maj","jun","jul","aug","sep","okt","nov","dec"];
@@ -356,7 +358,7 @@ async function boot(){
 document.addEventListener("click",e=>{if(e.target.id==="logout"&&sb)sb.auth.signOut()});
 // Home Screen apps keep the old page in memory; when the app comes back into view, reload if a newer version is deployed.
 if(/[?&]r=\d/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
-const BUILD="20261120075529";
+const BUILD="20261126114152";
 async function checkUpdate(){try{const r=await fetch("/version.txt",{cache:"no-store"});if(!r.ok)return;const v=(await r.text()).trim();
   if(v&&v!==BUILD&&pending===0)location.reload()}catch(_){}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
@@ -488,17 +490,24 @@ function addRows(src,rows){
 function noteOwn(txt){const m=String(txt).match(/\b\d{4}[ -]?\d{2}[ -]?\d{5}\b|\b\d{6}-\d{4}\b|\b\d{11,14}\b/);if(!m)return;
   const d=m[0].replace(/\D/g,"");const full=d.length>=11?[d,d.slice(4)]:[d];for(const x of full)if(!S.own.includes(x))S.own.push(x)}
 function tagOwnTransfers(){for(const t of S.tx){const m=t.key.match(/^överföring (\d+)$/);if(!m||S.rules[t.key])continue;
-  if(S.own.some(o=>m[1]===o||m[1].endsWith(o)||o.endsWith(m[1])))S.rules[t.key]=TRANSFER}}
+  if(own(m[1]))S.rules[t.key]=TRANSFER}}
 
+// A row can be one side of a pair unless you tagged its place as something else (e.g. Sparande), or it is
+// "Överföring <number>" to an account that isn't one of your uploaded ones (a savings account, someone else).
+function own(nr){return S.own.some(o=>nr===o||nr.endsWith(o)||o.endsWith(nr))}
+function pairable(t){const r=S.rules[t.key];if(r&&r!==TRANSFER&&r!=="Kortfaktura")return false;
+  const m=t.key.match(/^överföring (\d+)$/);return !(m&&t.amount<0&&!own(m[1]))}
 /* Money moving between your own accounts shows up twice: minus on one, plus on the other.
    Match those pairs (same amount, opposite sign, different account, within 3 days) and tag both as transfers. */
 function pairTransfers(){
   const byAmt={};let n=0;const day=d=>Date.parse(d)/864e5;
-  for(const t of S.tx){if(S.overrides[t.id]||splitOf(t))continue;const k=Math.round(Math.abs(t.amount)*100);(byAmt[k]=byAmt[k]||[]).push(t)}
+  for(const t of S.tx){if(S.overrides[t.id]||splitOf(t)||!pairable(t))continue;const k=Math.round(Math.abs(t.amount)*100);(byAmt[k]=byAmt[k]||[]).push(t)}
   for(const k in byAmt){const list=byAmt[k];if(list.length<2)continue;
     const used=new Set();
     for(const a of list){if(a.amount>=0||used.has(a))continue;
-      const b=list.find(x=>!used.has(x)&&x!==a&&x.amount>0&&x.src!==a.src&&Math.abs(day(x.date)-day(a.date))<=3);
+      // the closest in time wins, so two same-sized moves on adjacent days pair up the right way
+      const b=list.filter(x=>!used.has(x)&&x!==a&&x.amount>0&&x.src!==a.src&&Math.abs(day(x.date)-day(a.date))<=3)
+        .sort((x,y)=>Math.abs(day(x.date)-day(a.date))-Math.abs(day(y.date)-day(a.date)))[0];
       if(b){used.add(a);used.add(b);S.overrides[a.id]=TRANSFER;S.overrides[b.id]=TRANSFER;n++}}}
   return n;
 }
@@ -631,12 +640,14 @@ function periodLabel(p){if(view.gran==="y")return p;if(view.gran==="q")return p.
 const INCOME_TAGS=new Set(["Lön"]);
 function isIncome(a,tag){return a>=0&&(!tag||INCOME_TAGS.has(tag))}
 // In, out and out per tag for a set of transactions.
-function tally(txs){const p={inc:0,out:0,byTag:{}};
+function tally(txs){const p={inc:0,out:0,save:0,byTag:{}};
   for(const t of txs)for(const{tag,amount:a}of partsOf(t)){if(tag===TRANSFER)continue;
+    if(tag===SAVINGS){p.save-=a;continue} // money back from savings lowers what was saved
     if(isIncome(a,tag))p.inc+=a;else{const k=tag||"";p.byTag[k]=(p.byTag[k]||0)-a}}
   // A tag that got more back than was spent in a period (paid in one month, repaid in the next) has nothing
   // left to shrink; the surplus counts as income so the net stays right.
   for(const k of Object.keys(p.byTag)){const v=p.byTag[k];if(v<=0.005){p.inc+=-v;delete p.byTag[k]}else p.out+=v}
+  if(p.save<0){p.inc+=-p.save;p.save=0} // took out more than you put in: the surplus is money in
   return p;
 }
 function aggregate(months){
@@ -726,7 +737,7 @@ function renderOverview(){
   const now=periodOf(curMonth()+"-01");const full=months.filter(m=>m<now);
   const sel=view.month&&per[view.month]?view.month:(full[full.length-1]||months[months.length-1]);
   view.cur=sel;
-  const P=per[sel];const net=P.inc-P.out;const i=months.indexOf(sel);
+  const P=per[sel];const net=P.inc-P.out-P.save;const i=months.indexOf(sel);
   const byTag=P.byTag;const tagsUsed=Object.keys(byTag).sort((a,b)=>byTag[b]-byTag[a]);
   const allTags=[...new Set(months.flatMap(m=>Object.keys(per[m].byTag)))].sort((a,b)=>S.tags.indexOf(a)-S.tags.indexOf(b));
   const MF=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
@@ -744,10 +755,11 @@ function renderOverview(){
     <div class="kpis">
       <div class="kpi"><div class="l">In</div><div class="v in num">${kr(P.inc)}</div></div>
       <div class="kpi"><div class="l">Ut</div><div class="v out num">${kr(P.out)}</div></div>
+      ${P.save>0?`<div class="kpi"><div class="l">Sparat</div><div class="v num" style="color:${color(SAVINGS)}">${kr(P.save)}</div></div>`:""}
       <div class="kpi"><div class="l">Netto</div><div class="v num">${net>=0?"+":"−"}${kr(Math.abs(net))}</div></div>
     </div>
     <div class="card"><div class="chart">${chartSVG(months,per,allTags)}</div>
-      <div class="legend" style="margin-top:10px"><span><i class="dot" style="background:var(--in)"></i>Inkomst</span>${allTags.map(t=>`<span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span>`).join("")}<span><i class="dot" style="background:var(--ink);border-radius:50%"></i>Netto</span></div>
+      <div class="legend" style="margin-top:10px"><span><i class="dot" style="background:var(--in)"></i>Inkomst</span>${allTags.map(t=>`<span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span>`).join("")}${months.some(m=>per[m].save>0)?`<span><i class="dot" style="background:${color(SAVINGS)};opacity:.55"></i>Sparat</span>`:""}<span><i class="dot" style="background:var(--ink);border-radius:50%"></i>Netto</span></div>
       <p class="foot" style="margin:8px 0 0">Tryck på ${view.gran==="m"?"en månad":view.gran==="q"?"ett kvartal":"ett år"} i grafen för att visa ${view.gran==="y"?"det":view.gran==="q"?"det":"den"}.</p></div>
     <div class="card brk"><h2>Utgifter per tagg · ${name(sel)}</h2>
       ${tagsUsed.length?tagsUsed.map(t=>{const open=view.openTag===t;return`<div class="cat${open?" open":""}"><button class="it" data-cat="${esc(t)}" aria-expanded="${open}"><span class="nm"><span class="chev" aria-hidden="true">›</span><i class="dot" style="background:${color(t)}"></i>${esc(t||"Otaggat")}</span><span class="am num">${kr(byTag[t])}<small>${Math.round(byTag[t]/P.out*100)} %</small></span><span class="bar"><i style="width:${byTag[t]/byTag[tagsUsed[0]]*100}%;background:${color(t)}"></i></span></button>${open?catDetail(x=>periodOf(x.date)===sel,t):""}</div>`}).join(""):`<div class="empty">Inga utgifter ${view.gran==="m"?"den här månaden":view.gran==="q"?"det här kvartalet":"det här året"}.</div>`}
@@ -760,12 +772,13 @@ function payCard(){
   const dl=iso=>{const d=new Date(iso+"T12:00:00");return DOW[d.getDay()]+" "+d.getDate()+" "+MONTHS[d.getMonth()]+yr(iso)};
   const MF=["januari","februari","mars","april","maj","juni","juli","augusti","september","oktober","november","december"];
   const pname=MF[+from.slice(5,7)-1].replace(/^./,c=>c.toUpperCase())+"lönen"+yr(from);
-  const left=P.inc-P.out,toNext=daysBetween(today,next),open=view.payOpen,days=daysBetween(from,to)+1;
+  const left=P.inc-P.out-P.save,toNext=daysBetween(today,next),open=view.payOpen,days=daysBetween(from,to)+1;
   const leftTxt=P.inc>0?`${back?"över":"kvar"} <b class="num">${left>=0?"":"−"}${kr(Math.abs(left))}</b>`:"";
   let meta;
-  if(back)meta=[leftTxt,`${days} dagar`];
+  const saved=P.save>0?`sparat <b class="num">${kr(P.save)}</b>`:"";
+  if(back)meta=[leftTxt,saved,`${days} dagar`];
   else{const stale=lastData<today?(lastData<from?`<span class="warn">Ingen fil efter lönen än, senaste data ${dl(lastData)}</span>`:`data t.o.m. ${dl(lastData)}`):"";
-    meta=[leftTxt,toNext>0?`${toNext} ${toNext===1?"dag":"dagar"} till nästa lön`:"lönedag",stale]}
+    meta=[leftTxt,saved,toNext>0?`${toNext} ${toNext===1?"dag":"dagar"} till nästa lön`:"lönedag",stale]}
   const title=back?`Lönen ${dl(from).replace(yr(to)&&yr(from)===yr(to)?yr(from):"","")} – ${dl(to)}`:`Sedan lönen · ${dl(from)}`;
   const byTag=P.byTag,tags=Object.keys(byTag).sort((a,b)=>byTag[b]-byTag[a]);
   const diff=same!=null&&same>0?P.out-same:null;
@@ -791,7 +804,7 @@ function catDetail(inP,tag,openPlace=view.openPlace,attr="place"){
 }
 function chartSVG(months,per,tags){
   const W=Math.max(340,months.length*46+60),H=260,L=46,R=10,T=14,B=26;
-  const maxIn=Math.max(1,...months.map(m=>per[m].inc)),maxOut=Math.max(1,...months.map(m=>per[m].out));
+  const maxIn=Math.max(1,...months.map(m=>per[m].inc)),maxOut=Math.max(1,...months.map(m=>per[m].out+per[m].save));
   const step=niceStep(Math.max(maxIn,maxOut)/3);
   const top=Math.ceil(maxIn/step)*step||step,bot=Math.ceil(maxOut/step)*step||step;
   const ph=H-T-B;const y=v=>T+(top-v)/(top+bot)*ph;const bw=(W-L-R)/months.length;const w=Math.min(28,bw*.62);
@@ -803,8 +816,10 @@ function chartSVG(months,per,tags){
     g+=`<g data-month="${m}" style="cursor:pointer"${dim}><rect x="${L+bw*i}" y="${T}" width="${bw}" height="${ph}" fill="transparent"/>`;
     if(p.inc>0)g+=`<rect x="${x}" y="${y(p.inc)}" width="${w}" height="${y(0)-y(p.inc)}" rx="2" fill="var(--in)"/>`;
     let acc=0;for(const t of tags){const v=p.byTag[t]||0;if(!v)continue;g+=`<rect x="${x}" y="${y(-acc)}" width="${w}" height="${y(-acc-v)-y(-acc)}" fill="${color(t)}"><title>${t||"Otaggat"}: ${kr(v)}</title></rect>`;acc+=v}
+    // savings sit under the spending, paler, since the money is put aside rather than spent
+    if(p.save>0)g+=`<rect x="${x}" y="${y(-acc)}" width="${w}" height="${y(-acc-p.save)-y(-acc)}" fill="${color(SAVINGS)}" opacity="0.55"><title>Sparat: ${kr(p.save)}</title></rect>`;
     g+=`<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10" fill="var(--muted)">${periodLabel(m)}</text></g>`;
-    netPts.push([cx,y(p.inc-p.out)]);
+    netPts.push([cx,y(p.inc-p.out-p.save)]);
   });
   g+=`<polyline points="${netPts.map(p=>p.join(",")).join(" ")}" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round" pointer-events="none"/>`;
   netPts.forEach(([x,yy])=>g+=`<circle cx="${x}" cy="${yy}" r="3" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5" pointer-events="none"/>`);
